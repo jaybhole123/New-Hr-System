@@ -1,20 +1,62 @@
-import React, { useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { Plus, X, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useEmployees } from '../hooks/useEmployees';
+import { supabase } from '../lib/supabase';
+import { Plus, X, Save, Loader, Edit, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function LeaveTracker() {
-  const [employees] = useLocalStorage('hr_employees', []);
+  const [employees] = useEmployees();
   
-  // Format: { "EMP001": { cl: 12, sl: 12, el: 15 }, ... }
-  const [leaveAllotments, setLeaveAllotments] = useLocalStorage('hr_leave_allotments', {});
+  const [leaveAllotments, setLeaveAllotments] = useState({});
+  const [leaveRequests, setLeaveRequests] = useState([]);
   
-  // Format: [{ id: 1, empId: 'EMP001', type: 'CL', from: '2026-07-01', to: '2026-07-02', days: 2, status: 'Approved', reason: 'Fever' }, ...]
-  const [leaveRequests, setLeaveRequests] = useLocalStorage('hr_leave_requests', []);
+  const [savingBalances, setSavingBalances] = useState(false);
+  const [savingRequest, setSavingRequest] = useState(false);
 
   const [activeTab, setActiveTab] = useState('Balance');
   const [showModal, setShowModal] = useState(false);
   const [newRequest, setNewRequest] = useState({ empId: '', type: 'CL', from: '', to: '', reason: '' });
+  
+  // Reject Modal State
+  const [rejectModalData, setRejectModalData] = useState({ reqId: null, reason: '' });
+
+  useEffect(() => {
+    fetchLeaveData();
+  }, []);
+
+  const fetchLeaveData = async () => {
+    try {
+      const [allotmentsRes, requestsRes] = await Promise.all([
+        supabase.from('leave_allotments').select('*'),
+        supabase.from('leave_requests').select('*').order('created_at', { ascending: false })
+      ]);
+      
+      if (allotmentsRes.error) throw allotmentsRes.error;
+      if (requestsRes.error) throw requestsRes.error;
+      
+      const allotmentsMap = {};
+      allotmentsRes.data.forEach(row => {
+        allotmentsMap[row.employee_id] = { cl: row.cl, sl: row.sl, el: row.el };
+      });
+      setLeaveAllotments(allotmentsMap);
+      
+      const reqs = requestsRes.data.map(row => ({
+        id: row.id,
+        empId: row.employee_id,
+        type: row.leave_type,
+        from: row.start_date,
+        to: row.end_date,
+        days: row.days,
+        status: row.status,
+        reason: row.reason
+      }));
+      setLeaveRequests(reqs);
+    } catch (err) {
+      console.error('Error fetching leave data:', err);
+      toast.error('Failed to load leave data');
+    }
+  };
 
   // Helper to calculate days between dates
   const calculateDays = (from, to) => {
@@ -37,26 +79,150 @@ export default function LeaveTracker() {
     }));
   };
 
-  const submitRequest = (e) => {
-    e.preventDefault();
-    if (!newRequest.empId || !newRequest.from || !newRequest.to) {
-      alert("Please fill all required fields");
-      return;
+  const saveAllotments = async () => {
+    setSavingBalances(true);
+    try {
+      const upsertData = Object.keys(leaveAllotments).map(empId => ({
+        employee_id: empId,
+        cl: leaveAllotments[empId].cl,
+        sl: leaveAllotments[empId].sl,
+        el: leaveAllotments[empId].el
+      }));
+      
+      if (upsertData.length > 0) {
+        const { error } = await supabase.from('leave_allotments').upsert(upsertData, { onConflict: 'employee_id' });
+        if (error) throw error;
+        toast.success('Leave balances saved successfully');
+      }
+    } catch (err) {
+      console.error('Error saving balances:', err);
+      toast.error('Failed to save leave balances');
+    } finally {
+      setSavingBalances(false);
     }
-    const days = calculateDays(newRequest.from, newRequest.to);
-    const req = {
-      id: Date.now().toString(),
-      ...newRequest,
-      days,
-      status: 'Pending'
-    };
-    setLeaveRequests([...leaveRequests, req]);
-    setShowModal(false);
-    setNewRequest({ empId: '', type: 'CL', from: '', to: '', reason: '' });
   };
 
-  const updateRequestStatus = (reqId, newStatus) => {
-    setLeaveRequests(leaveRequests.map(r => r.id === reqId ? { ...r, status: newStatus } : r));
+  const submitRequest = async (e) => {
+    e.preventDefault();
+    if (!newRequest.empId || !newRequest.from || !newRequest.to) {
+      return toast.error("Please fill all required fields");
+    }
+    
+    setSavingRequest(true);
+    const days = calculateDays(newRequest.from, newRequest.to);
+    
+    try {
+      if (newRequest.id) {
+        // Update existing request
+        const { error } = await supabase.from('leave_requests').update({
+          employee_id: newRequest.empId,
+          leave_type: newRequest.type,
+          start_date: newRequest.from,
+          end_date: newRequest.to,
+          days: days,
+          reason: newRequest.reason,
+          status: newRequest.status
+        }).eq('id', newRequest.id);
+        
+        if (error) throw error;
+        
+        setLeaveRequests(leaveRequests.map(r => r.id === newRequest.id ? {
+          ...r,
+          empId: newRequest.empId,
+          type: newRequest.type,
+          from: newRequest.from,
+          to: newRequest.to,
+          days: days,
+          reason: newRequest.reason,
+          status: newRequest.status
+        } : r));
+        toast.success('Leave request updated successfully');
+      } else {
+        // Insert new request
+        const { data, error } = await supabase.from('leave_requests').insert([{
+          employee_id: newRequest.empId,
+          leave_type: newRequest.type,
+          start_date: newRequest.from,
+          end_date: newRequest.to,
+          days: days,
+          reason: newRequest.reason,
+          status: 'Pending'
+        }]).select();
+        
+        if (error) throw error;
+        
+        if (data && data[0]) {
+          const row = data[0];
+          const newReq = {
+            id: row.id,
+            empId: row.employee_id,
+            type: row.leave_type,
+            from: row.start_date,
+            to: row.end_date,
+            days: row.days,
+            status: row.status,
+            reason: row.reason
+          };
+          setLeaveRequests([newReq, ...leaveRequests]);
+        }
+        toast.success('Leave request submitted');
+      }
+      
+      setShowModal(false);
+      setNewRequest({ empId: '', type: 'CL', from: '', to: '', reason: '' });
+    } catch (err) {
+      console.error('Error submitting request:', err);
+      toast.error('Failed to save request');
+    } finally {
+      setSavingRequest(false);
+    }
+  };
+
+  const updateRequestStatus = async (reqId, newStatus, newReason = null) => {
+    try {
+      const updateData = { status: newStatus };
+      if (newReason !== null) updateData.reason = newReason;
+
+      const { error } = await supabase.from('leave_requests').update(updateData).eq('id', reqId);
+      if (error) throw error;
+      
+      setLeaveRequests(leaveRequests.map(r => {
+        if (r.id === reqId) {
+          return { ...r, status: newStatus, ...(newReason !== null && { reason: newReason }) };
+        }
+        return r;
+      }));
+      toast.success(`Request ${newStatus.toLowerCase()}`);
+    } catch (err) {
+      console.error('Error updating status:', err);
+      toast.error('Failed to update status');
+    }
+  };
+
+  const deleteRequest = async (reqId) => {
+    if (!window.confirm('Are you sure you want to delete this leave request?')) return;
+    try {
+      const { error } = await supabase.from('leave_requests').delete().eq('id', reqId);
+      if (error) throw error;
+      setLeaveRequests(leaveRequests.filter(r => r.id !== reqId));
+      toast.success('Request deleted successfully');
+    } catch (err) {
+      console.error('Error deleting request:', err);
+      toast.error('Failed to delete request');
+    }
+  };
+
+  const openEditModal = (req) => {
+    setNewRequest({
+      id: req.id,
+      empId: req.empId,
+      type: req.type,
+      from: req.from,
+      to: req.to,
+      reason: req.reason || '',
+      status: req.status
+    });
+    setShowModal(true);
   };
 
   // Calculate taken leaves per employee
@@ -166,10 +332,17 @@ export default function LeaveTracker() {
       </div>
 
       {activeTab === 'Balance' && (
-        <div className="card fade-in" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-          <div style={{ backgroundColor: 'var(--primary-color)', color: 'white', textAlign: 'center', padding: '16px', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '0.5px' }}>
-            LEAVE BALANCE
+        <div className="fade-in">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+            <button className="btn-primary" onClick={saveAllotments} disabled={savingBalances} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {savingBalances ? <Loader size={16} className="spin" /> : <Save size={16} />} 
+              {savingBalances ? 'Saving...' : 'Save Balances'}
+            </button>
           </div>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+            <div style={{ backgroundColor: 'var(--primary-color)', color: 'white', textAlign: 'center', padding: '16px', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '0.5px' }}>
+              LEAVE BALANCE
+            </div>
           
           <div style={{ overflowX: 'auto', paddingBottom: '12px' }}>
             <table style={{ minWidth: '1000px', borderCollapse: 'collapse', margin: '0' }}>
@@ -248,13 +421,14 @@ export default function LeaveTracker() {
               Taken/Balance = Auto (from 'Leave Requests' where Status = Approved)
             </div>
           </div>
+          </div>
         </div>
       )}
 
       {activeTab === 'Requests' && (
         <div className="fade-in">
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-            <button className="btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button className="btn-primary" onClick={() => { setNewRequest({ empId: '', type: 'CL', from: '', to: '', reason: '', status: 'Pending' }); setShowModal(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Plus size={16} /> New Request
             </button>
           </div>
@@ -302,19 +476,27 @@ export default function LeaveTracker() {
                           </td>
                           <td style={{...tdStyle, textAlign: 'left'}}>{req.reason || '-'}</td>
                           <td style={tdStyle}>
-                            {req.status === 'Pending' && (
-                              <select 
-                                onChange={(e) => {
-                                  if (e.target.value) updateRequestStatus(req.id, e.target.value);
-                                }}
-                                style={{ padding: '4px', fontSize: '0.85rem' }}
-                                defaultValue=""
-                              >
-                                <option value="" disabled>Action</option>
-                                <option value="Approved">Approve</option>
-                                <option value="Rejected">Reject</option>
-                              </select>
-                            )}
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                              {req.status === 'Pending' ? (
+                                <>
+                                  <button onClick={() => updateRequestStatus(req.id, 'Approved')} style={{ padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#166534', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.2)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.1)'}>
+                                    Accept
+                                  </button>
+                                  <button onClick={() => setRejectModalData({ reqId: req.id, reason: '' })} style={{ padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}>
+                                    Reject
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => openEditModal(req)} style={{ padding: '6px', color: 'var(--primary-color)', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s', borderRadius: '4px' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'} title="Edit">
+                                    <Edit size={16} />
+                                  </button>
+                                  <button onClick={() => deleteRequest(req.id)} style={{ padding: '6px', color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s', borderRadius: '4px' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'} title="Delete">
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -418,7 +600,7 @@ export default function LeaveTracker() {
         }}>
           <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>New Leave Request</h2>
+              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{newRequest.id ? 'Edit Leave Request' : 'New Leave Request'}</h2>
               <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
                 <X size={24} />
               </button>
@@ -458,15 +640,86 @@ export default function LeaveTracker() {
                 <textarea value={newRequest.reason} onChange={e => setNewRequest({...newRequest, reason: e.target.value})} rows="3" style={{ padding: '8px', border: '1px solid var(--border-color)', borderRadius: '6px' }}></textarea>
               </div>
 
+              {newRequest.id && (
+                <div className="form-group">
+                  <label>Status</label>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: newRequest.status === 'Pending' ? 'rgba(245, 158, 11, 0.1)' : 'transparent', color: newRequest.status === 'Pending' ? '#b45309' : 'var(--text-primary)' }}>
+                      <input type="radio" name="status" value="Pending" checked={newRequest.status === 'Pending'} onChange={e => setNewRequest({...newRequest, status: e.target.value})} />
+                      Pending
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: newRequest.status === 'Approved' ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: newRequest.status === 'Approved' ? '#166534' : 'var(--text-primary)' }}>
+                      <input type="radio" name="status" value="Approved" checked={newRequest.status === 'Approved'} onChange={e => setNewRequest({...newRequest, status: e.target.value})} />
+                      Approved (Accept)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: newRequest.status === 'Rejected' ? 'rgba(239, 68, 68, 0.1)' : 'transparent', color: newRequest.status === 'Rejected' ? '#dc2626' : 'var(--text-primary)' }}>
+                      <input type="radio" name="status" value="Rejected" checked={newRequest.status === 'Rejected'} onChange={e => setNewRequest({...newRequest, status: e.target.value})} />
+                      Rejected (Reject)
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '8px' }}>
                 <button type="button" onClick={() => setShowModal(false)} className="btn-primary" style={{ backgroundColor: 'var(--text-secondary)' }}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  Submit Request
+                <button type="submit" className="btn-primary" disabled={savingRequest} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {savingRequest ? <Loader size={16} className="spin" /> : null}
+                  {newRequest.id ? 'Save Changes' : 'Submit Request'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Request Modal */}
+      {rejectModalData.reqId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', zIndex: 110,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: '480px', padding: '32px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Reject Leave Request</h2>
+              <button onClick={() => setRejectModalData({ reqId: null, reason: '' })} style={{ background: 'var(--bg-main)', border: 'none', cursor: 'pointer', padding: '8px', borderRadius: '50%', color: 'var(--text-secondary)' }}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Reason for Rejection</label>
+              <textarea 
+                value={rejectModalData.reason} 
+                onChange={(e) => setRejectModalData({ ...rejectModalData, reason: e.target.value })}
+                rows="4"
+                placeholder="Please explain why this request is being rejected..."
+                style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-main)', fontSize: '0.95rem', resize: 'vertical' }}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button onClick={() => setRejectModalData({ reqId: null, reason: '' })} className="btn-primary" style={{ backgroundColor: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '10px 20px', fontWeight: 600 }}>
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if(!rejectModalData.reason.trim()) return toast.error('Please enter a rejection reason');
+                  const req = leaveRequests.find(r => r.id === rejectModalData.reqId);
+                  const updatedReason = req.reason ? `${req.reason} | Rejected: ${rejectModalData.reason}` : `Rejected: ${rejectModalData.reason}`;
+                  updateRequestStatus(rejectModalData.reqId, 'Rejected', updatedReason);
+                  setRejectModalData({ reqId: null, reason: '' });
+                }} 
+                className="btn-primary" 
+                style={{ backgroundColor: 'var(--danger)', border: 'none', padding: '10px 24px', fontWeight: 600, boxShadow: '0 4px 12px rgba(220, 38, 38, 0.2)' }}
+              >
+                Confirm Reject
+              </button>
+            </div>
           </div>
         </div>
       )}

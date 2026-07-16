@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
 export default function EmployeeJoin() {
-  const [employees, setEmployees] = useLocalStorage('hr_employees', [
-    { id: 'EMP001', name: 'John Doe', department: 'IT', designation: 'Software Engineer', status: 'Active' },
-    { id: 'EMP002', name: 'Jane Smith', department: 'HR', designation: 'HR Manager', status: 'Active' },
-    { id: 'EMP003', name: 'Michael Johnson', department: 'Finance', designation: 'Accountant', status: 'On Leave' },
-  ]);
+  const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -17,27 +15,69 @@ export default function EmployeeJoin() {
     joiningDate: ''
   });
 
+  useEffect(() => {
+    async function fetchDepartments() {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('department');
+          
+        if (error) throw error;
+        
+        if (data) {
+          const uniqueDeps = [...new Set(data.map(d => d.department).filter(Boolean))];
+          setDepartments(uniqueDeps);
+        }
+      } catch (err) {
+        console.error('Error fetching departments:', err);
+      }
+    }
+    fetchDepartments();
+  }, []);
+
   const handleChange = (e) => {
     setFormData({...formData, [e.target.name]: e.target.value});
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newEmp = {
-      id: `EMP${String(employees.length + 1).padStart(3, '0')}`,
-      name: formData.name,
-      department: formData.department,
-      designation: formData.designation,
-      status: 'Active',
-      ...formData
-    };
-    
-    setEmployees([...employees, newEmp]);
-    alert(`Employee ${newEmp.name} Onboarded Successfully as ${newEmp.id}!`);
-    
-    setFormData({
-      name: '', email: '', phone: '', department: '', designation: '', joiningDate: ''
-    });
+    setLoading(true);
+
+    try {
+      // Get current count to generate EMP ID
+      const { count, error: countError } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+        
+      if (countError) throw countError;
+
+      const nextId = count ? count + 1 : 1;
+      const empId = `EMP${String(nextId).padStart(3, '0')}`;
+
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([{
+          employee_id: empId,
+          user_name: formData.name,
+          email_id: formData.email,
+          number: parseInt(formData.phone.replace(/\D/g, ''), 10) || null,
+          department: formData.department,
+          designation: formData.designation
+        }]);
+
+      if (insertError) throw insertError;
+
+      alert(`Employee ${formData.name} Onboarded Successfully as ${empId}!`);
+      
+      setFormData({
+        name: '', email: '', phone: '', department: '', designation: '', joiningDate: ''
+      });
+    } catch (error) {
+      console.error('Error inserting employee:', error);
+      alert('Failed to onboard employee: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -66,10 +106,9 @@ export default function EmployeeJoin() {
               <label>Department</label>
               <select name="department" value={formData.department} onChange={handleChange} required>
                 <option value="">Select Department</option>
-                <option value="IT">IT & Engineering</option>
-                <option value="HR">Human Resources</option>
-                <option value="Finance">Finance</option>
-                <option value="Sales">Sales & Marketing</option>
+                {departments.map((dep, idx) => (
+                  <option key={idx} value={dep}>{dep}</option>
+                ))}
               </select>
             </div>
             <div className="form-group">
@@ -81,7 +120,9 @@ export default function EmployeeJoin() {
               <input type="date" name="joiningDate" value={formData.joiningDate} onChange={handleChange} required />
             </div>
           </div>
-          <button type="submit" className="btn-primary" style={{ marginTop: '16px' }}>Onboard Employee</button>
+          <button type="submit" className="btn-primary" style={{ marginTop: '16px' }} disabled={loading}>
+            {loading ? 'Onboarding...' : 'Onboard Employee'}
+          </button>
         </form>
       </div>
     </div>

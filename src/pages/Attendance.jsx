@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { Plus, X, Save } from 'lucide-react';
+  import React, { useState, useEffect } from 'react';
+import { Plus, X, Save, Loader } from 'lucide-react';
+import { useEmployees } from '../hooks/useEmployees';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Attendance() {
-  const [employees] = useLocalStorage('hr_employees', []);
-  // hr_attendance_sheet format: { "2026-07": { "EMP001": { "1": "P", "2": "A", ... }, "EMP002": ... } }
-  const [attendanceSheet, setAttendanceSheet] = useLocalStorage('hr_attendance_sheet', {});
+  const [employees, , loading, error] = useEmployees();
+  console.log("Attendance fetch -> Employees:", employees.length, "Loading:", loading, "Error:", error);
+  const [saving, setSaving] = useState(false);
   
   const [activeTab, setActiveTab] = useState('Register');
   const [selectedMonth, setSelectedMonth] = useState('2026-07');
@@ -16,17 +18,44 @@ export default function Attendance() {
   // Current month data
   const [currentMonthData, setCurrentMonthData] = useState({});
 
+  // Helper to format '2026-07' to 'July 2026'
+  const getFormattedMonth = (yyyy_mm) => {
+    if (!yyyy_mm) return '';
+    const [y, m] = yyyy_mm.split('-');
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${monthNames[parseInt(m, 10) - 1]} ${y}`;
+  };
+
   useEffect(() => {
-    // Load data for selected month or initialize empty for all employees
-    const data = attendanceSheet[selectedMonth] || {};
-    const initializedData = {};
-    
-    employees.forEach(emp => {
-      initializedData[emp.id] = data[emp.id] || {};
-    });
-    
-    setCurrentMonthData(initializedData);
-  }, [selectedMonth, employees, attendanceSheet]);
+    async function fetchAttendance() {
+      if (employees.length === 0) return;
+      try {
+        const { data, error } = await supabase
+          .from('monthly_attendance')
+          .select('employee_id, attendance_data')
+          .eq('month_year', getFormattedMonth(selectedMonth));
+          
+        if (error) throw error;
+        
+        const dataMap = {};
+        if (data) {
+          data.forEach(row => {
+            dataMap[row.employee_id] = row.attendance_data;
+          });
+        }
+        
+        const initializedData = {};
+        employees.forEach(emp => {
+          initializedData[emp.id] = dataMap[emp.id] || {};
+        });
+        
+        setCurrentMonthData(initializedData);
+      } catch (err) {
+        console.error('Error fetching attendance:', err);
+      }
+    }
+    fetchAttendance();
+  }, [selectedMonth, employees]);
 
   const handleCellChange = (empId, day, value) => {
     const v = value.toUpperCase();
@@ -40,20 +69,112 @@ export default function Attendance() {
     }));
   };
 
-  const handleSave = () => {
-    setAttendanceSheet(prev => ({
-      ...prev,
-      [selectedMonth]: currentMonthData
-    }));
-    alert('Attendance saved successfully!');
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const formattedMonth = getFormattedMonth(selectedMonth);
+      const upsertData = employees.map(emp => ({
+        employee_id: emp.id,
+        month_year: formattedMonth,
+        attendance_data: currentMonthData[emp.id] || {}
+      }));
+      
+      const { error } = await supabase
+        .from('monthly_attendance')
+        .upsert(upsertData, { onConflict: 'employee_id, month_year' });
+        
+      if (error) throw error;
+      toast.success('Attendance saved successfully!');
+    } catch (err) {
+      console.error('Error saving attendance:', err);
+      toast.error('Failed to save attendance');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleUpload = (e) => {
+  const handleUpload = async (e) => {
     e.preventDefault();
-    if (!uploadData.file) return alert('Please select a CSV file to upload.');
-    alert(`Attendance sheet for ${uploadData.month}/${uploadData.year} uploaded successfully!`);
-    setShowModal(false);
-    setUploadData({ month: '07', year: '2026', file: null });
+    if (!uploadData.file) return toast.error('Please select a CSV file to upload.');
+    
+    const file = uploadData.file;
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result;
+        const rows = text.split('\n').map(row => row.trim()).filter(row => row);
+        
+        if (rows.length < 2) {
+          return toast.error('CSV file is empty or missing data rows');
+        }
+        
+        // Assume first row is header: employee_id, 1, 2, 3...
+        const headers = rows[0].split(',').map(h => h.trim());
+        const empIdIndex = headers.findIndex(h => h.toLowerCase() === 'employee_id' || h.toLowerCase() === 'employeeid');
+        
+        if (empIdIndex === -1) {
+          return toast.error('CSV must have an employee_id column');
+        }
+        
+        const upsertData = [];
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const monthName = monthNames[parseInt(uploadData.month, 10) - 1];
+        const monthYearStr = `${monthName} ${uploadData.year}`;
+        
+        for (let i = 1; i < rows.length; i++) {
+          const columns = rows[i].split(',').map(c => c.trim());
+          const empId = columns[empIdIndex];
+          if (!empId) continue;
+          
+          const attendance_data = {};
+          for (let j = 0; j < headers.length; j++) {
+            if (j !== empIdIndex) {
+              const day = headers[j]; // Should be a number 1-31
+              const val = columns[j] ? columns[j].toUpperCase() : '';
+              if (['P', 'A', 'L', 'HD'].includes(val)) {
+                 attendance_data[day] = val;
+              }
+            }
+          }
+          
+          upsertData.push({
+            employee_id: empId,
+            month_year: monthYearStr,
+            attendance_data
+          });
+        }
+        
+        if (upsertData.length === 0) {
+          return toast.error('No valid data found in CSV');
+        }
+        
+        const { error } = await supabase
+          .from('monthly_attendance')
+          .upsert(upsertData, { onConflict: 'employee_id, month_year' });
+          
+        if (error) throw error;
+        
+        toast.success(`Attendance sheet for ${monthYearStr} uploaded successfully!`);
+        setShowModal(false);
+        setUploadData({ month: '07', year: '2026', file: null });
+        
+        // If they uploaded data for the current month, refresh page to show it
+        if (getFormattedMonth(selectedMonth) === monthYearStr) {
+           window.location.reload();
+        }
+        
+      } catch (err) {
+        console.error('Error parsing CSV:', err);
+        toast.error('Failed to upload CSV: ' + err.message);
+      }
+    };
+    
+    reader.onerror = () => {
+      toast.error('Failed to read the file');
+    };
+    
+    reader.readAsText(file);
   };
 
   // Helper to calculate days in selected month
@@ -128,8 +249,9 @@ export default function Attendance() {
           <button className="btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--text-secondary)' }}>
             <Plus size={16} /> Upload CSV
           </button>
-          <button className="btn-primary" onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Save size={16} /> Save Changes
+          <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {saving ? <Loader size={16} className="spin" /> : <Save size={16} />} 
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -365,22 +487,23 @@ export default function Attendance() {
       {showModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100,
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px'
+          backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', zIndex: 100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px',
+          animation: 'fadeIn 0.2s ease-out'
         }}>
-          <div className="card" style={{ width: '100%', maxWidth: '500px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Upload Attendance Sheet</h2>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <X size={24} />
+          <div className="card" style={{ width: '100%', maxWidth: '480px', padding: '32px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>Upload Attendance</h2>
+              <button onClick={() => setShowModal(false)} style={{ background: 'var(--bg-main)', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--border-color)'} onMouseOut={(e) => e.currentTarget.style.background = 'var(--bg-main)'}>
+                <X size={20} />
               </button>
             </div>
             
-            <form onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <form onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'flex', gap: '16px' }}>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label>Month</label>
-                  <select value={uploadData.month} onChange={(e) => setUploadData({...uploadData, month: e.target.value})} required>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Month</label>
+                  <select value={uploadData.month} onChange={(e) => setUploadData({...uploadData, month: e.target.value})} required style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)', fontSize: '0.95rem' }}>
                     <option value="01">January</option>
                     <option value="02">February</option>
                     <option value="03">March</option>
@@ -395,23 +518,37 @@ export default function Attendance() {
                     <option value="12">December</option>
                   </select>
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label>Year</label>
-                  <input type="number" value={uploadData.year} onChange={(e) => setUploadData({...uploadData, year: e.target.value})} required min="2000" max="2100" />
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Year</label>
+                  <input type="number" value={uploadData.year} onChange={(e) => setUploadData({...uploadData, year: e.target.value})} required min="2000" max="2100" style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)', fontSize: '0.95rem' }} />
                 </div>
               </div>
               
-              <div className="form-group">
-                <label>Upload CSV File</label>
-                <input type="file" accept=".csv" onChange={(e) => setUploadData({...uploadData, file: e.target.files[0]})} required style={{ padding: '8px' }} />
-                <small style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>Please upload attendance data in CSV format only.</small>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Upload CSV File</label>
+                <div style={{ position: 'relative', border: '2px dashed var(--border-color)', borderRadius: '12px', padding: '32px 24px', textAlign: 'center', backgroundColor: 'var(--bg-main)', transition: 'all 0.2s', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary-color)'} onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}>
+                  <input type="file" accept=".csv" onChange={(e) => setUploadData({...uploadData, file: e.target.files[0]})} required style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '50%', color: 'var(--primary-color)' }}>
+                      <Plus size={24} />
+                    </div>
+                    <span style={{ fontWeight: 600, color: uploadData.file ? 'var(--primary-color)' : 'var(--text-primary)' }}>
+                      {uploadData.file ? uploadData.file.name : 'Click to Browse CSV'}
+                    </span>
+                    {!uploadData.file && <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>or drag and drop here</span>}
+                  </div>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '12px', marginBottom: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'var(--primary-color)' }}></span>
+                  Please ensure the CSV has an 'employee_id' column.
+                </p>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setShowModal(false)} className="btn-primary" style={{ backgroundColor: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+                <button type="button" onClick={() => setShowModal(false)} className="btn-primary" style={{ backgroundColor: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '10px 20px', fontWeight: 600 }}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
+                <button type="submit" className="btn-primary" style={{ padding: '10px 24px', fontWeight: 600, boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)' }}>
                   Upload Data
                 </button>
               </div>

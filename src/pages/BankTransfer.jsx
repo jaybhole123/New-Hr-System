@@ -1,20 +1,68 @@
-import React from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import React, { useState, useEffect } from 'react';
+import { useEmployees } from '../hooks/useEmployees';
+import { supabase } from '../lib/supabase';
+import { Loader } from 'lucide-react';
 
 export default function BankTransfer() {
-  const [employees] = useLocalStorage('hr_employees', []);
-  const [salaries] = useLocalStorage('hr_salaries', {});
-  const [settings] = useLocalStorage('hr_deduction_settings', { pf: 12, esic: 0.75, ptax: 200 });
+  const [employees, , empLoading] = useEmployees();
+  
+  const [salaries, setSalaries] = useState({});
+  const [settings, setSettings] = useState({ pf: 12, esic: 0.75, ptax: 200 });
+  const [loading, setLoading] = useState(true);
 
-  const activeEmployees = employees.filter(emp => emp.status === 'Active');
+  const isDataLoading = loading || empLoading;
 
-  const records = activeEmployees.map(emp => {
-    const sal = salaries[emp.id] || { basic: 0, hra: 0, allowances: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '' };
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [salariesRes, settingsRes] = await Promise.all([
+          supabase.from('salary_structures').select('*'),
+          supabase.from('payroll_settings').select('*').limit(1).single()
+        ]);
+
+        if (salariesRes.error) throw salariesRes.error;
+        
+        const salMap = {};
+        if (salariesRes.data) {
+          salariesRes.data.forEach(s => {
+            salMap[s.employee_id] = {
+              basic: s.basic || 0,
+              hra: s.hra || 0,
+              allowances: s.allowances || 0,
+              profTax: s.prof_tax || 0,
+              otherDeductions: s.other_deductions || 0,
+              paymentStatus: s.payment_status || 'Pending',
+              bankAccount: s.bank_account || '',
+              pfApplicable: s.pf_applicable !== false
+            };
+          });
+        }
+        setSalaries(salMap);
+
+        if (settingsRes.data) {
+          setSettings({
+            pf: settingsRes.data.pf_percentage || 12,
+            ptax: settingsRes.data.ptax_amount || 200,
+            esic: 0.75
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching bank transfer data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const records = employees.map(emp => {
+    const sal = salaries[emp.id] || { basic: 0, hra: 0, allowances: 0, profTax: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true };
     const gross = sal.basic + sal.hra + sal.allowances;
     
     // Deductions
-    const pfDeduction = sal.basic * (settings.pf / 100);
-    const ptax = settings.ptax;
+    const pfDeduction = sal.pfApplicable ? (sal.basic * (settings.pf / 100)) : 0;
+    const ptax = sal.profTax || 0;
     const otherDeduct = sal.otherDeductions || 0;
     const totalDeductions = pfDeduction + ptax + otherDeduct;
     
@@ -28,6 +76,21 @@ export default function BankTransfer() {
       paymentStatus: sal.paymentStatus || 'Pending'
     };
   });
+
+  if (isDataLoading) {
+    return (
+      <div className="fade-in" style={{ padding: '24px' }}>
+        <div className="page-header" style={{ marginBottom: '24px' }}>
+          <h1 className="page-title">Bank Transfer</h1>
+          <p className="page-subtitle">Generate CSV/Excel reports for bank salary uploads.</p>
+        </div>
+        <div className="card fade-in" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh' }}>
+          <Loader className="spin" size={32} color="var(--primary-color)" />
+          <span style={{ marginLeft: '12px', fontSize: '1.1rem', color: 'var(--text-secondary)' }}>Loading bank data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fade-in">
@@ -67,7 +130,7 @@ export default function BankTransfer() {
                   </td>
                 </tr>
               )) : (
-                <tr><td colSpan="4" style={{textAlign: 'center', padding: '24px'}}>No active employees found.</td></tr>
+                <tr><td colSpan="4" style={{textAlign: 'center', padding: '24px', color: 'var(--text-secondary)'}}>No employees found.</td></tr>
               )}
             </tbody>
           </table>

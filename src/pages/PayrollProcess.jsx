@@ -1,16 +1,72 @@
-import React, { useState } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import React, { useState, useEffect } from 'react';
+import { useEmployees } from '../hooks/useEmployees';
+import { supabase } from '../lib/supabase';
+import { Loader } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function PayrollProcess() {
   const [activeTab, setActiveTab] = useState('Run_Payroll');
 
-  const [employees] = useLocalStorage('hr_employees', []);
-  const [salaries, setSalaries] = useLocalStorage('hr_salaries', {});
-  const [settings] = useLocalStorage('hr_deduction_settings', { pf: 12, esic: 0.75, ptax: 200 });
-  const [, setProcessedPayroll] = useLocalStorage('hr_processed_payroll', []);
+  const [employees] = useEmployees();
+  
+  const [salaries, setSalaries] = useState({});
+  const [settings, setSettings] = useState({ pf: 12, esic: 0.75, ptax: 200 });
+  const [processedPayroll, setProcessedPayroll] = useState([]);
 
+  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [savingStructure, setSavingStructure] = useState(false);
+  
   const activeEmployees = employees.filter(emp => emp.status === 'Active');
+
+  useEffect(() => {
+    fetchPayrollData();
+  }, []);
+
+  const fetchPayrollData = async () => {
+    try {
+      const [salariesRes, settingsRes, processedRes] = await Promise.all([
+        supabase.from('salary_structures').select('*'),
+        supabase.from('payroll_settings').select('*').limit(1).single(),
+        supabase.from('processed_payroll').select('*')
+      ]);
+
+      if (salariesRes.error) throw salariesRes.error;
+      
+      const salMap = {};
+      if (salariesRes.data) {
+        salariesRes.data.forEach(s => {
+          salMap[s.employee_id] = {
+            basic: s.basic || 0,
+            hra: s.hra || 0,
+            allowances: s.allowances || 0,
+            profTax: s.prof_tax || 0,
+            otherDeductions: s.other_deductions || 0,
+            paymentStatus: s.payment_status || 'Pending',
+            bankAccount: s.bank_account || '',
+            pfApplicable: s.pf_applicable !== false // default true
+          };
+        });
+      }
+      setSalaries(salMap);
+
+      if (settingsRes.data) {
+        setSettings({
+          pf: settingsRes.data.pf_percentage || 12,
+          ptax: settingsRes.data.ptax_amount || 200,
+          esic: 0.75
+        });
+      }
+      
+      if (processedRes.data) {
+        setProcessedPayroll(processedRes.data);
+      }
+    } catch (err) {
+      console.error('Error fetching payroll data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Salary Structure state
   const [selectedEmp, setSelectedEmp] = useState('');
@@ -18,50 +74,53 @@ export default function PayrollProcess() {
     basic: 0, 
     hra: 0, 
     allowances: 0,
+    profTax: 0,
     otherDeductions: 0,
     paymentStatus: 'Pending',
-    bankAccount: ''
+    bankAccount: '',
+    pfApplicable: true
   });
 
-  const handleProcess = () => {
+  const handleProcess = async () => {
     setProcessing(true);
     
-    // Simulate complex calculation
-    setTimeout(() => {
+    try {
+      const currentMonthYear = 'July 2026';
+      
       const results = activeEmployees.map(emp => {
         const sal = salaries[emp.id] || { 
-          basic: 0, hra: 0, allowances: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: ''
+          basic: 0, hra: 0, allowances: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true
         };
         const gross = sal.basic + sal.hra + sal.allowances;
-        
-        // Add OT & Bonus from Salary Structure (now merged into allowances per user request)
-        const empOt = 0;
-        const empBonus = 0;
         const totalEarnings = gross;
 
-        // Deductions
-        const pfDeduction = sal.basic * (settings.pf / 100);
-        const esicDeduction = 0; // Removed ESIC for now since not in user's requested fields
-        const empAdv = 0; 
+        const pfDeduction = sal.pfApplicable ? (sal.basic * (settings.pf / 100)) : 0;
+        const empProfTax = sal.profTax || 0;
         const empOtherDeductions = sal.otherDeductions || 0;
-        const totalDeductions = pfDeduction + settings.ptax + empOtherDeductions;
+        const totalDeductions = pfDeduction + empProfTax + empOtherDeductions;
 
         const net = totalEarnings - totalDeductions;
 
         return {
-          id: emp.id,
-          name: emp.name,
+          employee_id: emp.id,
+          month_year: currentMonthYear,
           gross: totalEarnings,
           deductions: totalDeductions,
           net: net > 0 ? net : 0,
-          breakdown: { sal, empOt, empBonus, pfDeduction, esicDeduction, ptax: settings.ptax, empAdv, empOtherDeductions }
+          breakdown: { sal, pfDeduction, ptax: empProfTax, empOtherDeductions }
         };
       });
 
-      setProcessedPayroll(results);
+      const { error } = await supabase.from('processed_payroll').upsert(results, { onConflict: 'employee_id,month_year' });
+      if (error) throw error;
+      
+      toast.success(`Payroll Processed Successfully for ${currentMonthYear}!`);
+    } catch (err) {
+      console.error('Error processing payroll:', err);
+      toast.error('Failed to process payroll. Did you run the SQL query?');
+    } finally {
       setProcessing(false);
-      alert('Payroll Processed Successfully for July 2026!');
-    }, 2000);
+    }
   };
 
   // Salary Structure Handlers
@@ -73,32 +132,70 @@ export default function PayrollProcess() {
         basic: salaries[empId].basic || 0,
         hra: salaries[empId].hra || 0,
         allowances: salaries[empId].allowances || 0,
+        profTax: salaries[empId].profTax || 0,
         otherDeductions: salaries[empId].otherDeductions || 0,
         paymentStatus: salaries[empId].paymentStatus || 'Pending',
-        bankAccount: salaries[empId].bankAccount || ''
+        bankAccount: salaries[empId].bankAccount || '',
+        pfApplicable: salaries[empId].pfApplicable !== false
       });
     } else {
-      setFormData({ basic: 0, hra: 0, allowances: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '' });
+      setFormData({ basic: 0, hra: 0, allowances: 0, profTax: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true });
     }
   };
 
   const handleChange = (e) => {
-    setFormData({...formData, [e.target.name]: e.target.name === 'paymentStatus' || e.target.name === 'bankAccount' ? e.target.value : Number(e.target.value)});
+    const { name, value, type, checked } = e.target;
+    if (type === 'checkbox') {
+      setFormData({...formData, [name]: checked});
+    } else if (name === 'paymentStatus' || name === 'bankAccount') {
+      setFormData({...formData, [name]: value});
+    } else {
+      setFormData({...formData, [name]: value === '' ? '' : Number(value)});
+    }
   };
 
-  const handleSaveStructure = () => {
-    if(!selectedEmp) return alert('Select an employee first.');
-    setSalaries({
-      ...salaries,
-      [selectedEmp]: formData
-    });
-    alert('Salary structure saved successfully!');
+  const handleSaveStructure = async () => {
+    if(!selectedEmp) return toast.error('Select an employee first.');
+    setSavingStructure(true);
+    
+    try {
+      const upsertData = {
+        employee_id: selectedEmp,
+        basic: Number(formData.basic) || 0,
+        hra: Number(formData.hra) || 0,
+        allowances: Number(formData.allowances) || 0,
+        prof_tax: Number(formData.profTax) || 0,
+        other_deductions: Number(formData.otherDeductions) || 0,
+        payment_status: formData.paymentStatus,
+        bank_account: formData.bankAccount,
+        pf_applicable: formData.pfApplicable
+      };
+
+      const { error } = await supabase.from('salary_structures').upsert(upsertData, { onConflict: 'employee_id' });
+      if (error) throw error;
+
+      setSalaries({
+        ...salaries,
+        [selectedEmp]: formData
+      });
+      toast.success('Salary structure saved successfully!');
+    } catch (err) {
+      console.error('Error saving structure:', err);
+      toast.error('Failed to save structure. Did you run the SQL query?');
+    } finally {
+      setSavingStructure(false);
+    }
   };
 
-  const grossSalary = formData.basic + formData.hra + formData.allowances;
-  const pfAmount = formData.basic * (settings.pf / 100);
-  const profTax = selectedEmp ? settings.ptax : 0;
-  const totalDeductions = pfAmount + profTax + formData.otherDeductions;
+  const basicVal = Number(formData.basic) || 0;
+  const hraVal = Number(formData.hra) || 0;
+  const allowancesVal = Number(formData.allowances) || 0;
+  const profTaxVal = Number(formData.profTax) || 0;
+  const otherDeductVal = Number(formData.otherDeductions) || 0;
+
+  const grossSalary = basicVal + hraVal + allowancesVal;
+  const pfAmount = formData.pfApplicable ? (basicVal * (settings.pf / 100)) : 0;
+  const totalDeductions = pfAmount + profTaxVal + otherDeductVal;
   const netSalary = selectedEmp ? Math.max(0, grossSalary - totalDeductions) : 0;
   
   const selectedEmpData = employees.find(e => e.id === selectedEmp) || {};
@@ -131,16 +228,27 @@ export default function PayrollProcess() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px', marginTop: '16px' }}>
             <div className="form-group">
               <label>Basic Salary (₹)</label>
-              <input type="number" name="basic" value={formData.basic} onChange={handleChange} disabled={!selectedEmp} />
+              <input type="number" name="basic" value={formData.basic === 0 && formData.basic !== '' ? '' : formData.basic} onChange={handleChange} disabled={!selectedEmp} />
             </div>
             <div className="form-group">
               <label>HRA (₹)</label>
-              <input type="number" name="hra" value={formData.hra} onChange={handleChange} disabled={!selectedEmp} />
+              <input type="number" name="hra" value={formData.hra === 0 && formData.hra !== '' ? '' : formData.hra} onChange={handleChange} disabled={!selectedEmp} />
             </div>
             <div className="form-group">
               <label>Allowances (₹)</label>
-              <input type="number" name="allowances" value={formData.allowances} onChange={handleChange} disabled={!selectedEmp} />
+              <input type="number" name="allowances" value={formData.allowances === 0 && formData.allowances !== '' ? '' : formData.allowances} onChange={handleChange} disabled={!selectedEmp} />
             </div>
+            
+            <div className="form-group">
+              <label>PF Option</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: selectedEmp ? 'pointer' : 'not-allowed', userSelect: 'none', backgroundColor: formData.pfApplicable ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)', padding: '10px 16px', borderRadius: '8px', width: '100%', transition: 'all 0.3s', margin: 0 }}>
+                <input type="checkbox" name="pfApplicable" checked={formData.pfApplicable} onChange={handleChange} disabled={!selectedEmp} style={{ width: '18px', height: '18px', margin: 0 }} />
+                <span style={{ fontWeight: 600, color: formData.pfApplicable ? 'var(--primary-color)' : 'var(--danger)' }}>
+                  {formData.pfApplicable ? 'With PF (Deduct PF)' : 'Without PF (No PF)'}
+                </span>
+              </label>
+            </div>
+
             <div className="form-group">
               <label>Gross Salary (₹)</label>
               <input type="number" value={grossSalary.toFixed(2)} disabled style={{ opacity: 0.8, backgroundColor: 'rgba(59, 130, 246, 0.05)', fontWeight: 600, color: 'var(--primary-color)' }} />
@@ -154,11 +262,11 @@ export default function PayrollProcess() {
             </div>
             <div className="form-group">
               <label>Prof. Tax (₹)</label>
-              <input type="number" value={profTax} disabled style={{ opacity: 0.7 }} />
+              <input type="number" name="profTax" value={formData.profTax === 0 && formData.profTax !== '' ? '' : formData.profTax} onChange={handleChange} disabled={!selectedEmp} />
             </div>
             <div className="form-group">
               <label>Other Deduct. (₹)</label>
-              <input type="number" name="otherDeductions" value={formData.otherDeductions} onChange={handleChange} disabled={!selectedEmp} />
+              <input type="number" name="otherDeductions" value={formData.otherDeductions === 0 && formData.otherDeductions !== '' ? '' : formData.otherDeductions} onChange={handleChange} disabled={!selectedEmp} />
             </div>
             <div className="form-group">
               <label>Total Deduct. (₹)</label>
@@ -186,7 +294,10 @@ export default function PayrollProcess() {
           </div>
 
           <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-            <button className="btn-primary" onClick={handleSaveStructure} disabled={!selectedEmp}>Save Structure</button>
+            <button className="btn-primary" onClick={handleSaveStructure} disabled={!selectedEmp || savingStructure} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {savingStructure ? <Loader size={16} className="spin" /> : null}
+              Save Structure
+            </button>
           </div>
         </div>
     </div>
