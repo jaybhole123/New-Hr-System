@@ -398,3 +398,8 @@ CREATE TABLE public.offer_letters (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT offer_letters_pkey PRIMARY KEY (id)
 );
+
+-- Query to add new fields to the users table for Driving Licence and Experience
+ALTER TABLE public.users
+ADD COLUMN driving_licence character varying,
+ADD COLUMN experience character varying;

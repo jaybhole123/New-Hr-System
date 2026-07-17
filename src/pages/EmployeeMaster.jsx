@@ -39,6 +39,8 @@ export default function EmployeeMaster() {
     healthIssues: '',
     photo: '',
     dateOfBirth: '',
+    drivingLicence: '',
+    experience: '',
     status: 'Active'
   };
   
@@ -55,7 +57,7 @@ export default function EmployeeMaster() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, employee_id, user_name, department, designation, Designation, status, created_at, number, joining_date, fathers_name')
+        .select('id, employee_id, user_name, department, designation, Designation, status, created_at, number, joining_date, fathers_name, experience')
         .order('created_at', { ascending: false });
         
       if (error) throw error;
@@ -136,6 +138,8 @@ export default function EmployeeMaster() {
         bloodGroup: fullEmp.blood_group || '',
         healthIssues: fullEmp.health_issues || '',
         dateOfBirth: fullEmp.date_of_birth || '',
+        drivingLicence: fullEmp.driving_licence || '',
+        experience: fullEmp.experience || '',
         photo: fullEmp.photo || '',
         status: fullEmp.status || 'Active'
       });
@@ -210,6 +214,8 @@ export default function EmployeeMaster() {
         blood_group: formData.bloodGroup,
         health_issues: formData.healthIssues,
         date_of_birth: formData.dateOfBirth || null,
+        driving_licence: formData.drivingLicence,
+        experience: formData.experience,
         photo: uploadedPhotoUrl,
         status: formData.status
       };
@@ -300,6 +306,7 @@ export default function EmployeeMaster() {
                 <th>Department</th>
                 <th>Designation</th>
                 <th>Date of Joining</th>
+                <th>Experience</th>
                 <th>Father's Name</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -326,6 +333,7 @@ export default function EmployeeMaster() {
                   <td>{emp.department}</td>
                   <td>{emp.Designation || emp.designation}</td>
                   <td>{emp.joining_date ? new Date(emp.joining_date).toLocaleDateString() : '-'}</td>
+                  <td>{emp.experience || '-'}</td>
                   <td>{emp.fathers_name || '-'}</td>
                   <td>
                     <span style={{
@@ -419,6 +427,10 @@ export default function EmployeeMaster() {
                   <input type="number" name="baseSalary" value={formData.baseSalary} onChange={handleAddChange} required placeholder="50000" />
                 </div>
                 <div className="form-group">
+                  <label>Experience</label>
+                  <input type="text" name="experience" value={formData.experience} onChange={handleAddChange} placeholder="e.g. 2 Years / Fresher" />
+                </div>
+                <div className="form-group">
                   <label>Date of Birth</label>
                   <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleAddChange} required />
                 </div>
@@ -499,6 +511,10 @@ export default function EmployeeMaster() {
                 <div className="form-group">
                   <label>PAN Card No.</label>
                   <input type="text" name="panNo" value={formData.panNo} onChange={handleAddChange} required placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />
+                </div>
+                <div className="form-group">
+                  <label>Driving Licence (No.)</label>
+                  <input type="text" name="drivingLicence" value={formData.drivingLicence} onChange={handleAddChange} placeholder="e.g. MH1420110062821" style={{ textTransform: 'uppercase' }} />
                 </div>
               </div>
 
