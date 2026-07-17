@@ -78,7 +78,7 @@ export default function NetSalary() {
       deductions: totalDeductions,
       net: net > 0 ? net : 0,
       paymentStatus: sal.paymentStatus || 'Pending',
-      bankAccount: sal.bankAccount || '',
+      bankAccount: sal.bankAccount || emp.accountNo || '',
       breakdown: {
         sal,
         pfDeduction,
