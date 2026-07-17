@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Printer, Edit, Download, Building2 } from 'lucide-react';
+import { Printer, Edit, Download, Building2, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -98,12 +98,12 @@ const OfferLetter = () => {
                   <option value="Ms.">Ms.</option>
                   <option value="Mrs.">Mrs.</option>
                 </select>
-                <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full border rounded p-2" placeholder="e.g. PURNIMA SAHA" />
+                <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full border rounded p-2" />
               </div>
             </div>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-              <input type="text" name="address" value={formData.address} onChange={handleChange} className="w-full border rounded p-2" placeholder="e.g. RDA COLONY TIKRAPARA, RAIPUR (C.G)" />
+              <input type="text" name="address" value={formData.address} onChange={handleChange} className="w-full border rounded p-2" />
             </div>
             <div className="form-group">
               <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
@@ -140,8 +140,22 @@ const OfferLetter = () => {
            <style>
             {`
               @media print {
+                @page {
+                  size: A4;
+                  margin: 0;
+                }
+                html, body {
+                  width: 100%;
+                  height: 100%;
+                  margin: 0;
+                  padding: 0;
+                  overflow: hidden;
+                }
                 body * {
                   visibility: hidden;
+                }
+                .no-print {
+                  display: none !important;
                 }
                 .print-area, .print-area * {
                   visibility: visible;
@@ -152,28 +166,34 @@ const OfferLetter = () => {
                   left: 0;
                   top: 0;
                   width: 100%;
-                  background-color: white !important;
-                  padding: 20px !important;
-                  box-shadow: none !important;
+                  height: 100%;
+                  padding: 0 !important;
+                  margin: 0 !important;
                   border: none !important;
+                  box-shadow: none !important;
                 }
-                .no-print {
-                  display: none !important;
+                .letter-content {
+                  width: 100% !important;
+                  height: 100% !important;
+                  margin: 0 !important;
+                  padding: 15mm 15mm !important;
+                  border: none !important;
+                  box-sizing: border-box !important;
                 }
               }
             `}
           </style>
 
           <div className="flex justify-end gap-3 mb-4 no-print" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginBottom: '20px' }}>
-             <button onClick={handlePrint} className="btn-primary" style={{ backgroundColor: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Printer size={16} /> Print Now
+             <button onClick={() => setIsPreview(false)} className="btn-primary" style={{ backgroundColor: '#6b7280', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ArrowLeft size={16} /> Back
              </button>
              <button onClick={handleDownloadPDF} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Download size={16} /> Download PDF
              </button>
           </div>
 
-          <div ref={letterRef} className="font-sans text-sm" style={{ 
+          <div ref={letterRef} className="font-sans text-sm letter-content" style={{ 
             backgroundColor: '#fff', 
             color: '#333', 
             padding: '40px 50px', 
