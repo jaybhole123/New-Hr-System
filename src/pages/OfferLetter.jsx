@@ -40,9 +40,18 @@ const OfferLetter = () => {
     if (!element) return;
     
     try {
+      const originalWidth = element.style.width;
+      const originalHeight = element.style.height;
+      
+      element.style.width = '800px';
+      element.style.height = '1131px';
       element.style.border = 'none';
-      const canvas = await html2canvas(element, { scale: 2 });
+      
+      const canvas = await html2canvas(element, { scale: 2, windowWidth: 800 });
+      
       element.style.border = '1px solid #ccc';
+      element.style.width = originalWidth;
+      element.style.height = originalHeight;
       
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -174,11 +183,26 @@ const OfferLetter = () => {
                 }
                 .letter-content {
                   width: 100% !important;
-                  height: 100% !important;
-                  margin: 0 !important;
-                  padding: 15mm 15mm !important;
-                  border: none !important;
-                  box-sizing: border-box !important;
+                  max-width: 800px;
+                  height: auto !important;
+                  min-height: 100vw;
+                  padding: 20px !important;
+                }
+              }
+              @media screen and (max-width: 768px) {
+                .letter-content {
+                  width: 100% !important;
+                  height: auto !important;
+                  min-height: 1131px;
+                  padding: 20px !important;
+                  transform-origin: top center;
+                  transform: scale(min(1, calc(100vw / 800)));
+                  margin-bottom: calc(-1131px * (1 - min(1, calc(100vw / 800))));
+                }
+                .preview-wrapper {
+                  overflow-x: hidden !important;
+                  display: flex;
+                  justify-content: center;
                 }
               }
             `}
@@ -193,19 +217,21 @@ const OfferLetter = () => {
              </button>
           </div>
 
-          <div ref={letterRef} className="font-sans text-sm letter-content" style={{ 
-            backgroundColor: '#fff', 
-            color: '#333', 
-            padding: '40px 50px', 
-            width: '800px', 
-            height: '1131px', // A4 aspect ratio 1:1.414
-            border: '1px solid #ccc',
-            margin: '0 auto',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            fontFamily: '"Times New Roman", Times, serif'
-          }}>
+          <div className="preview-wrapper" style={{ width: '100%', overflowX: 'auto', paddingBottom: '20px' }}>
+            <div ref={letterRef} className="font-sans text-sm letter-content" style={{ 
+              backgroundColor: '#fff', 
+              color: '#333', 
+              padding: '40px 50px', 
+              width: '800px', 
+              height: '1131px', // A4 aspect ratio 1:1.414
+              border: '1px solid #ccc',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              fontFamily: '"Times New Roman", Times, serif',
+              boxSizing: 'border-box'
+            }}>
             
             {/* Header */}
             <div>
@@ -290,7 +316,7 @@ const OfferLetter = () => {
                 N.K. Agrawal & Sons Tower, 2nd Floor, Lane No. 8, Near State Bank of India, New Shanti Nagar
               </div>
             </div>
-
+            </div>
           </div>
         </div>
       )}
