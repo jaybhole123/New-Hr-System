@@ -1,9 +1,12 @@
   import React, { useState, useEffect } from 'react';
-import { Plus, X, Save, Loader } from 'lucide-react';
+import { Plus, X, Save, Loader, Download, FileSpreadsheet } from 'lucide-react';
 import { useEmployees } from '../hooks/useEmployees';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 export default function Attendance() {
   const [employees, , loading, error] = useEmployees();
@@ -109,9 +112,12 @@ export default function Attendance() {
           return toast.error('CSV file is empty or missing data rows');
         }
         
-        // Assume first row is header: employee_id, 1, 2, 3...
+        // Assume first row is header
         const headers = rows[0].split(',').map(h => h.trim());
-        const empIdIndex = headers.findIndex(h => h.toLowerCase() === 'employee_id' || h.toLowerCase() === 'employeeid');
+        const empIdIndex = headers.findIndex(h => {
+          const lower = h.toLowerCase().replace(/['"]/g, ''); // in case of quotes
+          return lower === 'employee_id' || lower === 'employeeid' || lower === 'employee id' || lower === 'emp id' || lower === 'empid';
+        });
         
         if (empIdIndex === -1) {
           return toast.error('CSV must have an employee_id column');
@@ -175,6 +181,54 @@ export default function Attendance() {
     };
     
     reader.readAsText(file);
+  };
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF('landscape', 'pt', 'a4');
+    doc.text(`Attendance Register - ${getFormattedMonth(selectedMonth)}`, 40, 40);
+    
+    const headers = ['Sr. No.', 'Employee Name', ...daysArray.map(String), 'P', 'A', 'L', 'HD', 'Att.%'];
+    const body = employees.map((emp, idx) => {
+      const stats = dashboardStats.find(s => s.id === emp.id);
+      const rowData = [idx + 1, emp.name];
+      daysArray.forEach(day => {
+        const val = day > daysCount ? '' : (currentMonthData[emp.id]?.[day] || '');
+        rowData.push(val);
+      });
+      rowData.push(stats.p, stats.a, stats.l, stats.hd, stats.attPercent.toFixed(1) + '%');
+      return rowData;
+    });
+
+    autoTable(doc, {
+      head: [headers],
+      body: body,
+      startY: 50,
+      styles: { fontSize: 7, cellPadding: 2, halign: 'center' },
+      columnStyles: { 1: { halign: 'left' } },
+      theme: 'grid'
+    });
+
+    doc.save(`Attendance_${selectedMonth}.pdf`);
+  };
+
+  const handleDownloadCSV = () => {
+    const headers = ['Employee ID', 'Employee Name', ...daysArray.map(String), 'P', 'A', 'L', 'HD', 'Att.%'];
+    const rows = employees.map((emp) => {
+      const stats = dashboardStats.find(s => s.id === emp.id);
+      const rowData = [emp.id, emp.name];
+      daysArray.forEach(day => {
+        const val = day > daysCount ? '' : (currentMonthData[emp.id]?.[day] || '');
+        rowData.push(val);
+      });
+      rowData.push(stats.p, stats.a, stats.l, stats.hd, `${stats.attPercent.toFixed(1)}%`);
+      return rowData;
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+    
+    XLSX.writeFile(workbook, `Attendance_${selectedMonth}.xlsx`);
   };
 
   // Helper to calculate days in selected month
@@ -246,6 +300,12 @@ export default function Attendance() {
           <p className="page-subtitle">Excel-style Attendance Register and Overview Dashboard.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          <button className="btn-primary" onClick={handleDownloadCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#0284c7' }}>
+            <FileSpreadsheet size={16} /> Export Excel
+          </button>
+          <button className="btn-primary" onClick={handleDownloadPDF} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#10b981' }}>
+            <Download size={16} /> Export PDF
+          </button>
           <button className="btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--text-secondary)' }}>
             <Plus size={16} /> Upload CSV
           </button>

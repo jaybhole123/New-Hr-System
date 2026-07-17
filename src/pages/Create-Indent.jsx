@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, X, Trash2, Eye, Download, Pencil } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { supabase } from '../lib/supabase';
 
 const Indent = () => {
-  const [indentData, setIndentData] = useLocalStorage('hr_indents', []);
+  const [indentData, setIndentData] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   const [showModal, setShowModal] = useState(false);
   const [selectedIndent, setSelectedIndent] = useState(null);
@@ -25,9 +26,56 @@ const Indent = () => {
   const [editTimestamp, setEditTimestamp] = useState(null);
   const [editStatus, setEditStatus] = useState(null);
 
+  useEffect(() => {
+    fetchIndents();
+  }, []);
+
+  const fetchIndents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('indents')
+        .select(`
+          *,
+          indent_items (*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedData = data.map(ind => ({
+        id: ind.id,
+        indentNumber: ind.indent_number,
+        timestamp: new Date(ind.created_at).toLocaleString('en-GB'),
+        departmentName: ind.department_name,
+        status: ind.status,
+        issuedBy: ind.issued_by,
+        approvedBy: ind.approved_by,
+        items: ind.indent_items.map(item => ({
+          id: item.id,
+          product: item.product,
+          qty: item.qty,
+          unit: item.unit,
+          expectedDate: item.expected_date,
+          remarks: item.remarks
+        }))
+      }));
+      setIndentData(formattedData);
+    } catch (error) {
+      console.error('Error fetching indents:', error);
+      toast.error('Failed to load indents');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const generateIndentNumber = () => {
-    const nextId = indentData.length + 1;
-    return `P-IND-${String(nextId).padStart(3, '0')}`;
+    if (indentData.length === 0) return 'P-IND-001';
+    const numbers = indentData.map(i => {
+       const parts = i.indentNumber.split('-');
+       return parseInt(parts[parts.length - 1]) || 0;
+    });
+    const maxNum = Math.max(...numbers);
+    return `P-IND-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
   const handleItemChange = (index, field, value) => {
@@ -53,10 +101,9 @@ const Indent = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Filter out empty rows
     const validItems = items.filter(item => item.product.trim() !== '');
     if (validItems.length === 0) {
       toast.error('Please add at least one material item');
@@ -68,30 +115,72 @@ const Indent = () => {
       return;
     }
 
-    const timestamp = isEditing ? editTimestamp : new Date().toLocaleString('en-GB');
-    const indentNumber = isEditing ? editIndentNumber : generateIndentNumber();
-    const status = isEditing ? editStatus : 'Pending';
+    try {
+      const indentNumber = isEditing ? editIndentNumber : generateIndentNumber();
+      const status = isEditing ? editStatus : 'Pending';
 
-    const newIndent = {
-      timestamp,
-      indentNumber,
-      departmentName,
-      issuedBy,
-      approvedBy,
-      items: validItems,
-      status
-    };
+      if (isEditing) {
+        const { error: updateError } = await supabase
+          .from('indents')
+          .update({
+            department_name: departmentName,
+            status: status
+          })
+          .eq('indent_number', indentNumber);
+          
+        if (updateError) throw updateError;
+        
+        const indentObj = indentData.find(i => i.indentNumber === indentNumber);
+        if (indentObj) {
+          await supabase.from('indent_items').delete().eq('indent_id', indentObj.id);
+          
+          const itemsToInsert = validItems.map(item => ({
+            indent_id: indentObj.id,
+            product: item.product,
+            qty: item.qty,
+            unit: item.unit,
+            expected_date: item.expectedDate || null,
+            remarks: item.remarks
+          }));
+          const { error: itemsError } = await supabase.from('indent_items').insert(itemsToInsert);
+          if (itemsError) throw itemsError;
+        }
 
-    if (isEditing) {
-      const updatedData = indentData.map(item => item.indentNumber === indentNumber ? newIndent : item);
-      setIndentData(updatedData);
-      toast.success('Indent updated successfully!');
-    } else {
-      setIndentData([newIndent, ...indentData]);
-      toast.success('Indent submitted successfully!');
+        toast.success('Indent updated successfully!');
+      } else {
+        const { data: newInd, error: insertError } = await supabase
+          .from('indents')
+          .insert([{
+            indent_number: indentNumber,
+            department_name: departmentName,
+            status: status
+          }])
+          .select()
+          .single();
+          
+        if (insertError) throw insertError;
+
+        const itemsToInsert = validItems.map(item => ({
+          indent_id: newInd.id,
+          product: item.product,
+          qty: item.qty,
+          unit: item.unit,
+          expected_date: item.expectedDate || null,
+          remarks: item.remarks
+        }));
+        
+        const { error: itemsError } = await supabase.from('indent_items').insert(itemsToInsert);
+        if (itemsError) throw itemsError;
+        
+        toast.success('Indent submitted successfully!');
+      }
+      
+      fetchIndents();
+      handleCancel();
+    } catch (error) {
+      console.error('Error saving indent:', error);
+      toast.error('Failed to save indent');
     }
-    
-    handleCancel();
   };
 
   const handleCancel = () => {
@@ -125,10 +214,17 @@ const Indent = () => {
     setShowModal(true);
   };
 
-  const handleDelete = (indentNumber) => {
+  const handleDelete = async (indentNumber) => {
     if (!window.confirm('Are you sure you want to delete this indent?')) return;
-    setIndentData(indentData.filter(item => item.indentNumber !== indentNumber));
-    toast.success('Indent deleted successfully');
+    try {
+      const { error } = await supabase.from('indents').delete().eq('indent_number', indentNumber);
+      if (error) throw error;
+      setIndentData(indentData.filter(item => item.indentNumber !== indentNumber));
+      toast.success('Indent deleted successfully');
+    } catch (error) {
+      console.error('Error deleting indent:', error);
+      toast.error('Failed to delete indent');
+    }
   };
 
   const generatePDF = () => {
@@ -173,15 +269,23 @@ const Indent = () => {
     doc.save(`${selectedIndent.indentNumber}.pdf`);
   };
 
-  const handleUpdateStatus = (indentNumber, newStatus) => {
-    const updatedData = indentData.map(item => {
-      if (item.indentNumber === indentNumber) {
-        return { ...item, status: newStatus };
-      }
-      return item;
-    });
-    setIndentData(updatedData);
-    toast.success(`Indent ${newStatus} successfully!`);
+  const handleUpdateStatus = async (indentNumber, newStatus) => {
+    try {
+      const { error } = await supabase.from('indents').update({ status: newStatus }).eq('indent_number', indentNumber);
+      if (error) throw error;
+      
+      const updatedData = indentData.map(item => {
+        if (item.indentNumber === indentNumber) {
+          return { ...item, status: newStatus };
+        }
+        return item;
+      });
+      setIndentData(updatedData);
+      toast.success(`Indent ${newStatus} successfully!`);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Failed to update status');
+    }
   };
 
   const filteredData = indentData.filter(item => {

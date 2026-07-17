@@ -12,7 +12,15 @@ export default function EmployeeJoin() {
     phone: '',
     department: '',
     designation: '',
-    joiningDate: ''
+    joiningDate: '',
+    baseSalary: '',
+    address: '',
+    aadharNo: '',
+    panNo: '',
+    bankName: '',
+    accountNo: '',
+    ifscCode: '',
+    branchName: ''
   });
 
   useEffect(() => {
@@ -62,19 +70,28 @@ export default function EmployeeJoin() {
           email_id: formData.email,
           number: parseInt(formData.phone.replace(/\D/g, ''), 10) || null,
           department: formData.department,
-          designation: formData.designation
+          designation: formData.designation,
+          joining_date: formData.joiningDate,
+          base_salary: Number(formData.baseSalary) || 0,
+          address: formData.address,
+          aadhar_no: formData.aadharNo,
+          pan_no: formData.panNo,
+          bank_name: formData.bankName,
+          account_no: formData.accountNo,
+          ifsc_code: formData.ifscCode,
+          branch_name: formData.branchName
         }]);
 
       if (insertError) throw insertError;
 
-      alert(`Employee ${formData.name} Onboarded Successfully as ${empId}!`);
+      toast.success(`Employee ${formData.name} Onboarded Successfully as ${empId}!`);
       
       setFormData({
-        name: '', email: '', phone: '', department: '', designation: '', joiningDate: ''
+        name: '', email: '', phone: '', department: '', designation: '', joiningDate: '', baseSalary: '', address: '', aadharNo: '', panNo: '', bankName: '', accountNo: '', ifscCode: '', branchName: ''
       });
     } catch (error) {
       console.error('Error inserting employee:', error);
-      alert('Failed to onboard employee: ' + error.message);
+      toast.error('Failed to onboard employee: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -89,6 +106,7 @@ export default function EmployeeJoin() {
 
       <div className="card">
         <form onSubmit={handleSubmit}>
+          <h3 style={{ marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Personal & Professional Details</h3>
           <div className="form-grid">
             <div className="form-group">
               <label>Name</label>
@@ -116,11 +134,52 @@ export default function EmployeeJoin() {
               <input type="text" name="designation" value={formData.designation} onChange={handleChange} required placeholder="Software Engineer" />
             </div>
             <div className="form-group">
+              <label>Base Salary (₹)</label>
+              <input type="number" name="baseSalary" value={formData.baseSalary} onChange={handleChange} required placeholder="50000" />
+            </div>
+            <div className="form-group">
               <label>Date of Joining</label>
               <input type="date" name="joiningDate" value={formData.joiningDate} onChange={handleChange} required />
             </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label>Address</label>
+              <textarea name="address" value={formData.address} onChange={handleChange} required placeholder="Full Address" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', resize: 'vertical' }} rows="3" />
+            </div>
           </div>
-          <button type="submit" className="btn-primary" style={{ marginTop: '16px' }} disabled={loading}>
+
+          <h3 style={{ marginTop: '32px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Identity Documents</h3>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Aadhar Document (No.)</label>
+              <input type="text" name="aadharNo" value={formData.aadharNo} onChange={handleChange} required placeholder="1234 5678 9012" />
+            </div>
+            <div className="form-group">
+              <label>PAN Card No.</label>
+              <input type="text" name="panNo" value={formData.panNo} onChange={handleChange} required placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />
+            </div>
+          </div>
+
+          <h3 style={{ marginTop: '32px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>Bank Details</h3>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Bank Name</label>
+              <input type="text" name="bankName" value={formData.bankName} onChange={handleChange} required placeholder="e.g. HDFC Bank" />
+            </div>
+            <div className="form-group">
+              <label>Account Number</label>
+              <input type="text" name="accountNo" value={formData.accountNo} onChange={handleChange} required placeholder="123456789012" />
+            </div>
+            <div className="form-group">
+              <label>IFSC Code</label>
+              <input type="text" name="ifscCode" value={formData.ifscCode} onChange={handleChange} required placeholder="HDFC0001234" style={{ textTransform: 'uppercase' }} />
+            </div>
+            <div className="form-group">
+              <label>Branch Name</label>
+              <input type="text" name="branchName" value={formData.branchName} onChange={handleChange} required placeholder="e.g. Connaught Place" />
+            </div>
+          </div>
+
+          <button type="submit" className="btn-primary" style={{ marginTop: '24px' }} disabled={loading}>
             {loading ? 'Onboarding...' : 'Onboard Employee'}
           </button>
         </form>

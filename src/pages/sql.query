@@ -243,6 +243,7 @@ CREATE TABLE public.users (
   reported_by text,
   can_self_assign boolean DEFAULT false,
   designation text,
+  joining_date date,
   CONSTRAINT users_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.working_day_calender (
@@ -280,71 +281,120 @@ CREATE TABLE public.rent_records (
   reminder_sent boolean DEFAULT false,
   CONSTRAINT rent_records_pkey PRIMARY KEY (id)
 );
-
 CREATE TABLE public.monthly_attendance (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    employee_id TEXT NOT NULL,
-    month_year TEXT NOT NULL,
-    attendance_data JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_monthly_attendance UNIQUE(employee_id, month_year)
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  employee_id text NOT NULL,
+  month_year text NOT NULL,
+  attendance_data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT monthly_attendance_pkey PRIMARY KEY (id)
 );
-
-CREATE INDEX idx_monthly_emp_date ON public.monthly_attendance(employee_id, month_year);
-
--- Leave Tracker Tables
 CREATE TABLE public.leave_allotments (
-    employee_id TEXT PRIMARY KEY,
-    cl INT DEFAULT 0,
-    sl INT DEFAULT 0,
-    el INT DEFAULT 0,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  employee_id text NOT NULL,
+  cl integer DEFAULT 0,
+  sl integer DEFAULT 0,
+  el integer DEFAULT 0,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT leave_allotments_pkey PRIMARY KEY (employee_id)
 );
-
 CREATE TABLE public.leave_requests (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    employee_id TEXT NOT NULL,
-    leave_type TEXT NOT NULL CHECK (leave_type IN ('CL', 'SL', 'EL')),
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    days INT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Approved', 'Rejected')),
-    reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  employee_id text NOT NULL,
+  leave_type text NOT NULL CHECK (leave_type = ANY (ARRAY['CL'::text, 'SL'::text, 'EL'::text])),
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  days integer NOT NULL,
+  status text NOT NULL DEFAULT 'Pending'::text CHECK (status = ANY (ARRAY['Pending'::text, 'Approved'::text, 'Rejected'::text])),
+  reason text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT leave_requests_pkey PRIMARY KEY (id)
 );
-
--- Payroll Process Tables
 CREATE TABLE public.salary_structures (
-    employee_id TEXT PRIMARY KEY,
-    basic NUMERIC DEFAULT 0,
-    hra NUMERIC DEFAULT 0,
-    allowances NUMERIC DEFAULT 0,
-    prof_tax NUMERIC DEFAULT 0,
-    other_deductions NUMERIC DEFAULT 0,
-    pf_applicable BOOLEAN DEFAULT TRUE,
-    payment_status TEXT DEFAULT 'Pending',
-    bank_account TEXT,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  employee_id text NOT NULL,
+  basic numeric DEFAULT 0,
+  hra numeric DEFAULT 0,
+  allowances numeric DEFAULT 0,
+  prof_tax numeric DEFAULT 0,
+  other_deductions numeric DEFAULT 0,
+  pf_applicable boolean DEFAULT true,
+  payment_status text DEFAULT 'Pending'::text,
+  bank_account text,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT salary_structures_pkey PRIMARY KEY (employee_id)
 );
-
 CREATE TABLE public.payroll_settings (
-    id INT PRIMARY KEY DEFAULT 1,
-    pf_percentage NUMERIC DEFAULT 12,
-    ptax_amount NUMERIC DEFAULT 200,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  id integer NOT NULL DEFAULT 1,
+  pf_percentage numeric DEFAULT 12,
+  ptax_amount numeric DEFAULT 200,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT payroll_settings_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.processed_payroll (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  employee_id text NOT NULL,
+  month_year text NOT NULL,
+  gross numeric NOT NULL,
+  deductions numeric NOT NULL,
+  net numeric NOT NULL,
+  breakdown jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT processed_payroll_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.indents (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  indent_number character varying NOT NULL UNIQUE,
+  department_name character varying NOT NULL,
+  status character varying DEFAULT 'Pending'::character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT indents_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.indent_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  indent_id bigint,
+  product character varying NOT NULL,
+  qty numeric NOT NULL,
+  unit character varying,
+  expected_date date,
+  remarks text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT indent_items_pkey PRIMARY KEY (id),
+  CONSTRAINT indent_items_indent_id_fkey FOREIGN KEY (indent_id) REFERENCES public.indents(id)
 );
 
-INSERT INTO public.payroll_settings (id, pf_percentage, ptax_amount) VALUES (1, 12, 200) ON CONFLICT DO NOTHING;
+-- Query to add new fields to the users table
+ALTER TABLE public.users
+ADD COLUMN address text,
+ADD COLUMN aadhar_no character varying,
+ADD COLUMN pan_no character varying,
+ADD COLUMN bank_name character varying,
+ADD COLUMN account_no character varying,
+ADD COLUMN ifsc_code character varying,
+ADD COLUMN branch_name character varying,
+ADD COLUMN base_salary numeric,
+ADD COLUMN fathers_name character varying,
+ADD COLUMN alternate_phone character varying,
+ADD COLUMN marital_status character varying,
+ADD COLUMN blood_group character varying,
+ADD COLUMN health_issues text,
+ADD COLUMN photo text,
+ADD COLUMN date_of_birth date;
 
-CREATE TABLE public.processed_payroll (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    employee_id TEXT NOT NULL,
-    month_year TEXT NOT NULL,
-    gross NUMERIC NOT NULL,
-    deductions NUMERIC NOT NULL,
-    net NUMERIC NOT NULL,
-    breakdown JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    CONSTRAINT unique_monthly_payroll UNIQUE(employee_id, month_year)
+-- Query to create a table for storing generated Offer Letters
+CREATE TABLE public.offer_letters (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  company_name character varying NOT NULL,
+  offer_date date NOT NULL,
+  title character varying(10),
+  employee_name character varying NOT NULL,
+  address text,
+  subject character varying,
+  designation character varying,
+  department character varying,
+  monthly_gross_salary numeric,
+  probation_period character varying,
+  working_hours character varying,
+  joining_date date,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT offer_letters_pkey PRIMARY KEY (id)
 );

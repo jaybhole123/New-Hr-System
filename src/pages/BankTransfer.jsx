@@ -102,9 +102,6 @@ export default function BankTransfer() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h3 style={{ fontSize: '1.25rem' }}>Bank Advice Report - July 2026</h3>
-          <button className="btn-primary" style={{ backgroundColor: 'var(--success)' }} disabled={records.length === 0}>
-            Download Bank CSV
-          </button>
         </div>
 
         <div style={{ overflowX: 'auto' }}>

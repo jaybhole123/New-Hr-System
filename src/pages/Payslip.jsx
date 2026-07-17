@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useEmployees } from '../hooks/useEmployees';
 import { supabase } from '../lib/supabase';
 import { Loader } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export default function Payslip() {
+  const payslipRef = useRef(null);
   const [employees, , empLoading] = useEmployees();
   
   const [salaries, setSalaries] = useState({});
@@ -104,6 +107,36 @@ export default function Payslip() {
     department: '---'
   };
 
+  const handleDownloadPDF = async () => {
+    if (!payslipRef.current) return;
+    try {
+      const canvas = await html2canvas(payslipRef.current, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      
+      // Add margins (15mm on each side)
+      const margin = 15;
+      const imgWidth = pdfWidth - (margin * 2);
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // Add box shadow effect by drawing a light gray rectangle behind
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(margin + 2, margin + 2, imgWidth, imgHeight, 'F');
+      
+      // Draw border
+      pdf.setDrawColor(200, 200, 200);
+      pdf.rect(margin, margin, imgWidth, imgHeight);
+      
+      // Add the image
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+      pdf.save(`Payslip_${empDetails.name}_July2026.pdf`);
+    } catch (err) {
+      console.error('Error generating PDF', err);
+    }
+  };
+
   if (isDataLoading) {
     return (
       <div className="fade-in" style={{ padding: '24px' }}>
@@ -136,11 +169,11 @@ export default function Payslip() {
         </div>
       </div>
 
-      <div className="card" style={{ maxWidth: '800px', margin: '0 auto' }}>
+      <div className="card" style={{ maxWidth: '800px', margin: '0 auto', marginBottom: '24px' }} ref={payslipRef}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px', borderBottom: '1px solid var(--border-color)', paddingBottom: '24px' }}>
           <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Company Tech Solutions</h2>
-            <p style={{ color: 'var(--text-secondary)' }}>123 Business Park, Tech City, 400001</p>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Jai Bhole</h2>
+            <p style={{ color: 'var(--text-secondary)' }}>N.K Agrawal and sons tower Sankar Nagar , Raipur</p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <h2 style={{ color: 'var(--primary-color)' }}>PAYSLIP</h2>
@@ -181,11 +214,10 @@ export default function Payslip() {
           <span style={{ fontSize: '1.2rem', fontWeight: 500 }}>Net Pay</span>
           <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary-color)' }}>₹ {payrollData.net.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
         </div>
+      </div>
 
-        <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
-          <button className="btn-primary" style={{ backgroundColor: 'var(--text-secondary)' }} disabled={!selectedEmp}>Email Payslip</button>
-          <button className="btn-primary" disabled={!selectedEmp}>Download PDF</button>
-        </div>
+      <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>
+        <button className="btn-primary" disabled={!selectedEmp} onClick={handleDownloadPDF}>Download PDF</button>
       </div>
     </div>
   );
