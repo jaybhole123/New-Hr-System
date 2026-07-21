@@ -133,6 +133,19 @@ export default function SalaryStructure() {
         [selectedEmp]: formData
       });
       toast.success('Salary structure saved successfully!');
+      
+      // Reset form
+      setSelectedEmp('');
+      setFormData({ 
+        basic: 0, 
+        hra: 0, 
+        allowances: 0,
+        profTax: 0,
+        otherDeductions: 0,
+        paymentStatus: 'Pending',
+        bankAccount: '',
+        pfApplicable: true
+      });
     } catch (err) {
       console.error('Error saving structure:', err);
       toast.error('Failed to save structure. Did you run the SQL query?');

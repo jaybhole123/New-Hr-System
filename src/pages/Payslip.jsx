@@ -78,7 +78,7 @@ export default function Payslip() {
       gross,
       deductions: totalDeductions,
       net: net > 0 ? net : 0,
-      bankAccount: sal.bankAccount || '',
+      bankAccount: sal.bankAccount || emp.accountNo || '',
       breakdown: {
         sal,
         pfDeduction,

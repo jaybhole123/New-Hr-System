@@ -72,7 +72,7 @@ export default function BankTransfer() {
       id: emp.id,
       name: emp.name,
       net: net > 0 ? net : 0,
-      bankAccount: sal.bankAccount || '',
+      bankAccount: sal.bankAccount || emp.accountNo || '',
       paymentStatus: sal.paymentStatus || 'Pending'
     };
   });
