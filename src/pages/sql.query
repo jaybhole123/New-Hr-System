@@ -244,6 +244,23 @@ CREATE TABLE public.users (
   can_self_assign boolean DEFAULT false,
   designation text,
   joining_date date,
+  address text,
+  aadhar_no character varying,
+  pan_no character varying,
+  bank_name character varying,
+  account_no character varying,
+  ifsc_code character varying,
+  branch_name character varying,
+  base_salary numeric,
+  fathers_name character varying,
+  alternate_phone character varying,
+  marital_status character varying,
+  blood_group character varying,
+  health_issues text,
+  photo text,
+  date_of_birth date,
+  driving_licence character varying,
+  experience character varying,
   CONSTRAINT users_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.working_day_calender (
@@ -279,6 +296,20 @@ CREATE TABLE public.rent_records (
   due_date date,
   message text,
   reminder_sent boolean DEFAULT false,
+  owner_name character varying,
+  monthly_rent numeric,
+  security_deposit numeric,
+  agreement_start date,
+  agreement_end date,
+  rent_due_date date,
+  payment_mode character varying,
+  last_rent_received date,
+  payment_status character varying,
+  rent_revision_date date,
+  electricity numeric,
+  maintenance numeric,
+  remarks text,
+  broker_number character varying,
   CONSTRAINT rent_records_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.monthly_attendance (
@@ -288,6 +319,7 @@ CREATE TABLE public.monthly_attendance (
   attendance_data jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  employee_name character varying,
   CONSTRAINT monthly_attendance_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.leave_allotments (
@@ -361,31 +393,11 @@ CREATE TABLE public.indent_items (
   CONSTRAINT indent_items_pkey PRIMARY KEY (id),
   CONSTRAINT indent_items_indent_id_fkey FOREIGN KEY (indent_id) REFERENCES public.indents(id)
 );
-
--- Query to add new fields to the users table
-ALTER TABLE public.users
-ADD COLUMN address text,
-ADD COLUMN aadhar_no character varying,
-ADD COLUMN pan_no character varying,
-ADD COLUMN bank_name character varying,
-ADD COLUMN account_no character varying,
-ADD COLUMN ifsc_code character varying,
-ADD COLUMN branch_name character varying,
-ADD COLUMN base_salary numeric,
-ADD COLUMN fathers_name character varying,
-ADD COLUMN alternate_phone character varying,
-ADD COLUMN marital_status character varying,
-ADD COLUMN blood_group character varying,
-ADD COLUMN health_issues text,
-ADD COLUMN photo text,
-ADD COLUMN date_of_birth date;
-
--- Query to create a table for storing generated Offer Letters
 CREATE TABLE public.offer_letters (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   company_name character varying NOT NULL,
   offer_date date NOT NULL,
-  title character varying(10),
+  title character varying,
   employee_name character varying NOT NULL,
   address text,
   subject character varying,
@@ -398,8 +410,9 @@ CREATE TABLE public.offer_letters (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT offer_letters_pkey PRIMARY KEY (id)
 );
-
--- Query to add new fields to the users table for Driving Licence and Experience
-ALTER TABLE public.users
-ADD COLUMN driving_licence character varying,
-ADD COLUMN experience character varying;
+CREATE TABLE public.employee (
+  id integer NOT NULL DEFAULT nextval('employee_id_seq'::regclass),
+  name character varying NOT NULL,
+  salary numeric DEFAULT 0,
+  CONSTRAINT employee_pkey PRIMARY KEY (id)
+);

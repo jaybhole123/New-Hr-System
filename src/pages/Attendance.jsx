@@ -9,8 +9,24 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 export default function Attendance() {
-  const [employees, , loading, error] = useEmployees();
-  console.log("Attendance fetch -> Employees:", employees.length, "Loading:", loading, "Error:", error);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchEmployees() {
+      try {
+        const { data, error } = await supabase.from('employee').select('*').order('id');
+        if (error) throw error;
+        setEmployees(data || []);
+      } catch (err) {
+        console.error('Error fetching employees:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchEmployees();
+  }, []);
+
   const [saving, setSaving] = useState(false);
   
   const [activeTab, setActiveTab] = useState('Register');
@@ -114,13 +130,19 @@ export default function Attendance() {
         
         // Assume first row is header
         const headers = rows[0].split(',').map(h => h.trim());
+        // Try to find employee_id or name column
         const empIdIndex = headers.findIndex(h => {
-          const lower = h.toLowerCase().replace(/['"]/g, ''); // in case of quotes
+          const lower = h.toLowerCase().replace(/['"]/g, '');
           return lower === 'employee_id' || lower === 'employeeid' || lower === 'employee id' || lower === 'emp id' || lower === 'empid';
         });
+
+        const nameIndex = headers.findIndex(h => {
+          const lower = h.toLowerCase().replace(/['"]/g, '');
+          return lower === 'name' || lower === 'employee name' || lower === 'employeename';
+        });
         
-        if (empIdIndex === -1) {
-          return toast.error('CSV must have an employee_id column');
+        if (empIdIndex === -1 && nameIndex === -1) {
+          return toast.error('CSV must have either an "employee_id" or "name" column');
         }
         
         const upsertData = [];
@@ -130,12 +152,21 @@ export default function Attendance() {
         
         for (let i = 1; i < rows.length; i++) {
           const columns = rows[i].split(',').map(c => c.trim());
-          const empId = columns[empIdIndex];
-          if (!empId) continue;
+          
+          let empId = null;
+          if (empIdIndex !== -1) {
+            empId = columns[empIdIndex];
+          } else if (nameIndex !== -1) {
+            const empName = columns[nameIndex];
+            const foundEmp = employees.find(e => e.name?.toLowerCase().trim() === empName?.toLowerCase().trim());
+            if (foundEmp) empId = foundEmp.id;
+          }
+
+          if (!empId) continue; // Skip if we couldn't resolve an employee ID
           
           const attendance_data = {};
           for (let j = 0; j < headers.length; j++) {
-            if (j !== empIdIndex) {
+            if (j !== empIdIndex && j !== nameIndex) {
               const day = headers[j]; // Should be a number 1-31
               const val = columns[j] ? columns[j].toUpperCase() : '';
               if (['P', 'A', 'L', 'HD'].includes(val)) {
@@ -239,17 +270,32 @@ export default function Attendance() {
   const daysCount = getDaysInMonth(selectedMonth);
   const daysArray = Array.from({length: 31}, (_, i) => i + 1); // Always show 31 cols as per Excel
 
+  const [yearStr, monthStr] = selectedMonth.split('-');
+  const yearNum = parseInt(yearStr, 10);
+  const monthNum = parseInt(monthStr, 10) - 1;
+
   // Calculations for Dashboard
   const dashboardStats = employees.map(emp => {
     const empData = currentMonthData[emp.id] || {};
     let p = 0, a = 0, l = 0, hd = 0;
-    
+
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === yearNum && today.getMonth() === monthNum;
+    const maxDayToCount = isCurrentMonth ? today.getDate() : daysCount;
+
     for(let i=1; i<=daysCount; i++) {
       const val = empData[i];
+      const isSunday = new Date(yearNum, monthNum, i).getDay() === 0;
+
       if(val === 'P') p++;
       else if(val === 'A') a++;
       else if(val === 'L') l++;
       else if(val === 'HD') hd++;
+      else if(isSunday && i <= maxDayToCount) {
+        // Automatically count Sunday as Present (P) if it's left empty, 
+        // but don't count future Sundays if we are in the current month.
+        p++;
+      }
     }
     
     const presentEquiv = p + (hd * 0.5);
@@ -376,20 +422,24 @@ export default function Attendance() {
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto', paddingBottom: '12px' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '550px', paddingBottom: '12px' }}>
             <table style={{ borderCollapse: 'collapse', margin: '0' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
-                  <th style={{...thStyle, width: '50px'}}>Sr.<br/>No.</th>
-                  <th style={{...thStyle, minWidth: '200px'}}>Employee Name</th>
-                  {daysArray.map(day => (
-                    <th key={day} style={{...thStyle, padding: '4px', width: '45px', minWidth: '45px', fontSize: '0.8rem'}}>{day}</th>
-                  ))}
-                  <th style={{...thStyle, width: '45px', minWidth: '45px'}}>P</th>
-                  <th style={{...thStyle, width: '45px', minWidth: '45px'}}>A</th>
-                  <th style={{...thStyle, width: '45px', minWidth: '45px'}}>L</th>
-                  <th style={{...thStyle, width: '45px', minWidth: '45px'}}>HD</th>
-                  <th style={{...thStyle, width: '60px', minWidth: '60px'}}>Att.%</th>
+                  <th style={{...thStyle, width: '50px', position: 'sticky', top: 0, zIndex: 10}}>Sr.<br/>No.</th>
+                  <th style={{...thStyle, minWidth: '200px', position: 'sticky', top: 0, zIndex: 10}}>Employee Name</th>
+                  {daysArray.map(day => {
+                    const isInvalidDay = day > daysCount;
+                    const isSunday = !isInvalidDay && new Date(yearNum, monthNum, day).getDay() === 0;
+                    return (
+                      <th key={day} style={{...thStyle, padding: '4px', width: '45px', minWidth: '45px', fontSize: '0.8rem', position: 'sticky', top: 0, zIndex: 10, backgroundColor: isSunday ? '#fef08a' : 'var(--bg-main)', color: isSunday ? '#a16207' : 'var(--text-secondary)'}}>{day}</th>
+                    );
+                  })}
+                  <th style={{...thStyle, width: '45px', minWidth: '45px', position: 'sticky', top: 0, zIndex: 10}}>P</th>
+                  <th style={{...thStyle, width: '45px', minWidth: '45px', position: 'sticky', top: 0, zIndex: 10}}>A</th>
+                  <th style={{...thStyle, width: '45px', minWidth: '45px', position: 'sticky', top: 0, zIndex: 10}}>L</th>
+                  <th style={{...thStyle, width: '45px', minWidth: '45px', position: 'sticky', top: 0, zIndex: 10}}>HD</th>
+                  <th style={{...thStyle, width: '60px', minWidth: '60px', position: 'sticky', top: 0, zIndex: 10}}>Att.%</th>
                 </tr>
               </thead>
               <tbody>
@@ -404,6 +454,7 @@ export default function Attendance() {
                         {daysArray.map(day => {
                           const isInvalidDay = day > daysCount;
                           const val = isInvalidDay ? '' : (currentMonthData[emp.id]?.[day] || '');
+                          const isSunday = !isInvalidDay && new Date(yearNum, monthNum, day).getDay() === 0;
                           
                           let color = 'var(--text-primary)';
                           if(val==='P') color = '#166534';
@@ -412,7 +463,7 @@ export default function Attendance() {
                           if(val==='HD') color = '#2563eb';
 
                           return (
-                            <td key={day} style={{...tdStyle, padding: 0, width: '45px', minWidth: '45px', backgroundColor: isInvalidDay ? '#f1f5f9' : 'inherit'}}>
+                            <td key={day} style={{...tdStyle, padding: 0, width: '45px', minWidth: '45px', backgroundColor: isInvalidDay ? '#f1f5f9' : (isSunday ? '#fef9c3' : 'inherit')}}>
                               <input 
                                 type="text"
                                 value={val}
@@ -600,11 +651,18 @@ export default function Attendance() {
                 </div>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '12px', marginBottom: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'var(--primary-color)' }}></span>
-                  Please ensure the CSV has an 'employee_id' column.
+                  Please ensure the CSV has an 'employee_id' or 'name' column.
                 </p>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
+              <div style={{ padding: '12px', backgroundColor: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>CSV Header Format (Copy this):</p>
+                <code style={{ display: 'block', padding: '8px', backgroundColor: 'var(--bg-card)', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--text-secondary)', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+                  S.NO,NAME,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+                </code>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
                 <button type="button" onClick={() => setShowModal(false)} className="btn-primary" style={{ backgroundColor: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '10px 20px', fontWeight: 600 }}>
                   Cancel
                 </button>
