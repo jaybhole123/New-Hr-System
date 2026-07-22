@@ -525,7 +525,16 @@ const Indent = () => {
             <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px 0 0 0', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div className="form-group" style={{ maxWidth: '300px' }}>
                 <label>Department Name <span style={{ color: 'var(--danger)' }}>*</span></label>
-                <input type="text" required value={departmentName} onChange={(e) => setDepartmentName(e.target.value)} placeholder="e.g. IT, HR, Sales" />
+                <select 
+                  required 
+                  value={departmentName} 
+                  onChange={(e) => setDepartmentName(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)' }}
+                >
+                  <option value="">Select Department...</option>
+                  <option value="Jai Bhole Enterprises">Jai Bhole Enterprises</option>
+                  <option value="Jai Bhole Traders">Jai Bhole Traders</option>
+                </select>
               </div>
 
               <div style={{ overflowX: 'auto' }}>

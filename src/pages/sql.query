@@ -416,3 +416,16 @@ CREATE TABLE public.employee (
   salary numeric DEFAULT 0,
   CONSTRAINT employee_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.inventory_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  item_code character varying NOT NULL UNIQUE,
+  category character varying NOT NULL,
+  item_name character varying NOT NULL,
+  unit character varying NOT NULL,
+  opening_qty numeric DEFAULT 0,
+  current_stock numeric DEFAULT 0,
+  status character varying NOT NULL DEFAULT 'In Stock'::character varying CHECK (status::text = ANY (ARRAY['In Stock'::character varying, 'Low Stock'::character varying, 'Out of Stock'::character varying]::text[])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT inventory_items_pkey PRIMARY KEY (id)
+);

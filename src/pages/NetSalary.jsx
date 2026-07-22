@@ -114,7 +114,10 @@ export default function NetSalary() {
     textTransform: 'none',
     letterSpacing: 'normal',
     whiteSpace: 'nowrap',
-    backgroundColor: 'var(--bg-main)'
+    backgroundColor: 'var(--bg-main)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 10
   };
 
   const tdStyle = {
@@ -209,9 +212,9 @@ export default function NetSalary() {
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto', paddingBottom: '12px' }}>
+          <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 280px)', paddingBottom: '12px' }}>
             <table style={{ minWidth: '1500px', borderCollapse: 'collapse', margin: '0' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 4px -2px rgba(0,0,0,0.1)' }}>
                 <tr>
                   <th style={{...thStyle, width: '60px'}}>Sr. No.</th>
                   <th style={thStyle}>Employee Name</th>
@@ -219,12 +222,12 @@ export default function NetSalary() {
                   <th style={thStyle}>Basic Salary (₹)</th>
                   <th style={thStyle}>HRA (₹)</th>
                   <th style={thStyle}>Allowances (₹)</th>
-                  <th style={{...thStyle, backgroundColor: 'rgba(0,0,0,0.02)'}}>Gross Salary (₹)</th>
+                  <th style={{...thStyle, backgroundColor: '#f8fafc'}}>Gross Salary (₹)</th>
                   <th style={thStyle}>PF (₹)</th>
                   <th style={thStyle}>Prof. Tax (₹)</th>
                   <th style={thStyle}>Other Deduct. (₹)</th>
-                  <th style={{...thStyle, backgroundColor: 'rgba(0,0,0,0.02)'}}>Total Deduct. (₹)</th>
-                  <th style={{...thStyle, backgroundColor: 'rgba(16, 185, 129, 0.05)'}}>Net Salary (₹)</th>
+                  <th style={{...thStyle, backgroundColor: '#f8fafc'}}>Total Deduct. (₹)</th>
+                  <th style={{...thStyle, backgroundColor: '#ecfdf5'}}>Net Salary (₹)</th>
                   <th style={thStyle}>Payment Status</th>
                   <th style={thStyle}>Bank A/c No.</th>
                 </tr>

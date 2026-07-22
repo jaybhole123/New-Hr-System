@@ -17,7 +17,8 @@ import {
   LayoutDashboard,
   Menu,
   X,
-  FileSignature
+  FileSignature,
+  Package
 } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 
@@ -35,6 +36,7 @@ import Payslip from './pages/Payslip';
 import BankTransfer from './pages/BankTransfer';
 import Indent from './pages/Create-Indent';
 import OfferLetter from './pages/OfferLetter';
+import Inventory from './pages/Inventory';
 
 function App() {
   const [theme, setTheme] = useState('light');
@@ -59,6 +61,7 @@ function App() {
     { path: '/payslip', label: 'Payslip', icon: <FileText size={20} /> },
     // { path: '/bank', label: 'Bank Transfer', icon: <Building size={20} /> },
     { path: '/indent', label: 'Create Indent', icon: <ShoppingCart size={20} /> },
+    { path: '/inventory', label: 'Inventory', icon: <Package size={20} /> },
     { path: '/offer-letter', label: 'Offer Letter', icon: <FileSignature size={20} /> },
   ];
 
@@ -127,6 +130,7 @@ function App() {
               <Route path="/payslip" element={<Payslip />} />
               <Route path="/bank" element={<BankTransfer />} />
               <Route path="/indent" element={<Indent />} />
+              <Route path="/inventory" element={<Inventory />} />
               <Route path="/offer-letter" element={<OfferLetter />} />
             </Routes>
           </div>
