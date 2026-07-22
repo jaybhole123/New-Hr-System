@@ -304,8 +304,8 @@ export default function EmployeeMaster() {
                 <th>Name</th>
                 <th>Phone Number</th>
                 <th>Department</th>
-                <th>Designation</th>
-                <th>Date of Joining</th>
+                {/* <th>Designation</th> */}
+                {/* <th>Date of Joining</th> */}
                 <th>Experience</th>
                 <th>Father's Name</th>
                 <th>Status</th>
@@ -331,8 +331,8 @@ export default function EmployeeMaster() {
                   <td style={{ fontWeight: 500 }}>{emp.user_name}</td>
                   <td>{emp.number || '-'}</td>
                   <td>{emp.department}</td>
-                  <td>{emp.Designation || emp.designation}</td>
-                  <td>{emp.joining_date ? new Date(emp.joining_date).toLocaleDateString() : '-'}</td>
+                  {/* <td>{emp.Designation || emp.designation}</td> */}
+                  {/* <td>{emp.joining_date ? new Date(emp.joining_date).toLocaleDateString() : '-'}</td> */}
                   <td>{emp.experience || '-'}</td>
                   <td>{emp.fathers_name || '-'}</td>
                   <td>

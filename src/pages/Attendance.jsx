@@ -645,12 +645,42 @@ export default function Attendance() {
 
   return (
     <div className="fade-in">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <style>
+        {`
+          .desktop-table-container { overflow-x: auto; }
+          .desktop-table { display: table; width: 100%; border-collapse: collapse; margin: 0; }
+          .mobile-cards { display: none; }
+          
+          /* Responsive Utilities */
+          .page-header-wrapper { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
+          .page-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+          .tabs-container { display: flex; gap: 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 24px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+          
+          /* Hide scrollbar for tabs */
+          .tabs-container::-webkit-scrollbar { display: none; }
+          .tabs-container { -ms-overflow-style: none; scrollbar-width: none; }
+
+          .monitoring-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; }
+
+          @media (max-width: 768px) {
+            .desktop-table-container { display: none; }
+            .mobile-cards { display: flex; flex-direction: column; gap: 16px; padding: 16px; background-color: var(--bg-main); border-radius: 12px; }
+            
+            .page-header-wrapper { flex-direction: column; align-items: stretch; text-align: center; }
+            .page-actions { justify-content: center; }
+            
+            .monitoring-header { flex-direction: column; align-items: stretch; }
+            .monitoring-header > div { display: flex; flex-direction: column; width: 100%; gap: 8px; }
+            .monitoring-header input, .monitoring-header button { width: 100%; justify-content: center; }
+          }
+        `}
+      </style>
+      <div className="page-header-wrapper">
         <div>
           <h1 className="page-title">Attendance Dashboard</h1>
           <p className="page-subtitle">Excel-style Attendance Register and Overview Dashboard.</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="page-actions">
           <button className="btn-primary" onClick={handleDownloadCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#0284c7' }}>
             <FileSpreadsheet size={16} /> Export Excel
           </button>
@@ -667,7 +697,7 @@ export default function Attendance() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>
+      <div className="tabs-container">
         <button
           onClick={() => setActiveTab('Register')}
           style={{
@@ -1052,7 +1082,7 @@ export default function Attendance() {
 
       {activeTab === 'Monitoring' && (
         <div className="fade-in">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div className="monitoring-header">
             <h2 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Navigation size={20} color="var(--primary-color)" /> Live Attendance Monitoring
             </h2>
@@ -1070,8 +1100,8 @@ export default function Attendance() {
           </div>
           
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', margin: '0' }}>
+            <div className="desktop-table-container">
+              <table className="desktop-table">
                 <thead style={{ backgroundColor: 'var(--bg-main)', position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr>
                     <th style={{...thStyle, textAlign: 'left'}}>Employee</th>
@@ -1134,6 +1164,63 @@ export default function Attendance() {
                   )}
                 </tbody>
               </table>
+            </div>
+            
+            <div className="mobile-cards">
+              {monitoringLogs.length > 0 ? (
+                monitoringLogs.map(log => {
+                  const formattedDate = log.attendance_date ? log.attendance_date.split('-').reverse().join('-') : '-';
+                  return (
+                    <div key={log.id} style={{ backgroundColor: 'var(--bg-card)', padding: '16px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                       <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', alignItems: 'center' }}>
+                          {log.image ? (
+                             <img src={log.image} onClick={() => setViewingImage(log.image)} style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: '2px solid var(--border-color)', flexShrink: 0 }} />
+                          ) : (
+                             <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--border-color)', flexShrink: 0 }}><User size={24} color="var(--text-secondary)"/></div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                             <h4 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: 'var(--text-primary)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.employee?.name || `Emp ID: ${log.employee_id}`}</h4>
+                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '12px', backgroundColor: log.attendance_type === 'Office' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)', color: log.attendance_type === 'Office' ? '#166534' : '#1d4ed8', fontWeight: 600 }}>{log.attendance_type}</span>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{formattedDate}</span>
+                             </div>
+                          </div>
+                       </div>
+                
+                       <div style={{ backgroundColor: 'var(--bg-main)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                          <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px' }}>
+                             <div style={{ flex: 1, textAlign: 'left' }}>
+                               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Check In</div>
+                               <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{log.check_in ? new Date(log.check_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-'}</div>
+                             </div>
+                             <div style={{ flex: 1, textAlign: 'center', borderLeft: '1px solid rgba(0,0,0,0.05)', borderRight: '1px solid rgba(0,0,0,0.05)' }}>
+                               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Work Hrs</div>
+                               <div style={{ fontWeight: 700, color: 'var(--primary-color)', fontFamily: 'monospace', fontSize: '0.9rem' }}>{log.working_hours || '-'}</div>
+                             </div>
+                             <div style={{ flex: 1, textAlign: 'right' }}>
+                               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Check Out</div>
+                               <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{log.check_out ? new Date(log.check_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-'}</div>
+                             </div>
+                          </div>
+                   
+                          <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                             <div style={{ color: 'var(--text-secondary)', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '6px', fontSize: '0.8rem', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '12px' }}>
+                                <MapPin size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} /> 
+                                {log.address || 'Location N/A'}
+                             </div>
+                             {log.latitude && (
+                               <a href={`https://www.google.com/maps/search/?api=1&query=${log.latitude},${log.longitude}`} target="_blank" rel="noreferrer" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '4px', color: 'var(--primary-color)', fontWeight: 600, textDecoration: 'none', backgroundColor: 'rgba(37, 99, 235, 0.1)', padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', flexShrink: 0 }}>
+                                 <MapPin size={14} /> Live Location
+                               </a>
+                             )}
+                          </div>
+                       </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No live attendance records for {monitoringDate.split('-').reverse().join('-')}.</div>
+              )}
             </div>
           </div>
         </div>
