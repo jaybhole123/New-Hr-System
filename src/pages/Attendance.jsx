@@ -1,5 +1,5 @@
   import React, { useState, useEffect } from 'react';
-import { Plus, X, Save, Loader, Download, FileSpreadsheet } from 'lucide-react';
+import { Plus, X, Save, Loader, Download, FileSpreadsheet, MapPin, Navigation, Clock, CheckCircle2, User, RefreshCw, LogOut, LogIn, Camera } from 'lucide-react';
 import { useEmployees } from '../hooks/useEmployees';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -33,6 +33,311 @@ export default function Attendance() {
   const [selectedMonth, setSelectedMonth] = useState('2026-07');
   const [showModal, setShowModal] = useState(false);
   const [uploadData, setUploadData] = useState({ month: '07', year: '2026', file: null });
+
+  // Self Attendance States
+  const [selectedSelfEmployee, setSelectedSelfEmployee] = useState('');
+  const [selfAttendance, setSelfAttendance] = useState(null);
+  const [liveWorkingHours, setLiveWorkingHours] = useState('00:00:00');
+  const [monitoringLogs, setMonitoringLogs] = useState([]);
+  const [monitoringDate, setMonitoringDate] = useState(new Date().toISOString().split('T')[0]);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [selfiePreview, setSelfiePreview] = useState(null);
+  const [liveAddress, setLiveAddress] = useState('');
+  const [locating, setLocating] = useState(false);
+  
+  const videoRef = React.useRef(null);
+  const canvasRef = React.useRef(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [viewingImage, setViewingImage] = useState(null);
+
+  // Default Office coordinates (Example: New Delhi)
+  const OFFICE_LAT = 28.6139;
+  const OFFICE_LON = 77.2090;
+  const OFFICE_RADIUS_METERS = 500;
+
+  // Distance calculator (Haversine)
+  const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Radius of the earth in m
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+    return R * c; // Distance in m
+  };
+
+  const getAddressFromCoords = async (lat, lon) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      return data.display_name || 'Address not found';
+    } catch(e) {
+      console.error(e);
+      return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    }
+  };
+
+  const fetchSelfAttendance = async (empId) => {
+    if(!empId) {
+       setSelfAttendance(null);
+       return;
+    }
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('employee_id', parseInt(empId, 10))
+        .eq('attendance_date', today)
+        .maybeSingle();
+        
+      if (error) throw error;
+      setSelfAttendance(data || null);
+    } catch(err) {
+      console.error(err);
+      toast.error('Failed to load self attendance');
+    }
+  };
+
+  useEffect(() => {
+    fetchSelfAttendance(selectedSelfEmployee);
+  }, [selectedSelfEmployee]);
+
+  // Live timer for working hours
+  useEffect(() => {
+    let interval;
+    if(selfAttendance && selfAttendance.check_in && !selfAttendance.check_out) {
+      interval = setInterval(() => {
+        const checkInTime = new Date(selfAttendance.check_in).getTime();
+        const now = new Date().getTime();
+        const diff = now - checkInTime;
+        
+        const h = Math.floor(diff / (1000 * 60 * 60)).toString().padStart(2, '0');
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)).toString().padStart(2, '0');
+        const s = Math.floor((diff % (1000 * 60)) / 1000).toString().padStart(2, '0');
+        setLiveWorkingHours(`${h}:${m}:${s}`);
+      }, 1000);
+    } else if(selfAttendance && selfAttendance.working_hours) {
+      setLiveWorkingHours(selfAttendance.working_hours);
+    } else {
+      setLiveWorkingHours('00:00:00');
+    }
+    return () => clearInterval(interval);
+  }, [selfAttendance]);
+
+  const fetchCurrentLocation = () => {
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      const { latitude, longitude } = position.coords;
+      const addr = await getAddressFromCoords(latitude, longitude);
+      setLiveAddress(addr);
+      setLocating(false);
+    }, (err) => {
+      console.error(err);
+      toast.error('Location permission required');
+      setLocating(false);
+    });
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      setCameraStream(stream);
+      setIsCameraOpen(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error(err);
+      toast.error('Unable to access camera.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraOpen(false);
+  };
+
+  const captureImage = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg');
+      setSelfiePreview(dataUrl);
+      stopCamera();
+      
+      if (!liveAddress) {
+        fetchCurrentLocation();
+      }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  const handleCheckIn = () => {
+    if(!selectedSelfEmployee) return toast.error('Please select an employee first');
+    if(!selfiePreview) return toast.error('Please capture an image to check in');
+    if(!navigator.geolocation) return toast.error('Geolocation is not supported by your browser');
+    
+    setActionLoading(true);
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        const { latitude, longitude } = position.coords;
+        const dist = getDistanceFromLatLonInM(latitude, longitude, OFFICE_LAT, OFFICE_LON);
+        const type = dist <= OFFICE_RADIUS_METERS ? 'Office' : 'Field';
+        const address = await getAddressFromCoords(latitude, longitude);
+        
+        const today = new Date().toISOString().split('T')[0];
+        
+        const emp = employees.find(e => e.id === parseInt(selectedSelfEmployee, 10));
+        const newRecord = {
+          employee_id: parseInt(selectedSelfEmployee, 10),
+          employee_name: emp ? emp.name : 'Unknown',
+          attendance_date: today,
+          check_in: new Date().toISOString(),
+          attendance_type: type,
+          latitude,
+          longitude,
+          address,
+          image: selfiePreview,
+          status: 'Present',
+          device_info: navigator.userAgent
+        };
+        
+        const { data: insertedData, error } = await supabase
+          .from('attendance')
+          .insert([newRecord])
+          .select()
+          .single();
+          
+        if (error) throw error;
+
+        // Update the Attendance Register state (currentMonthData) so it reflects immediately
+        const todayObj = new Date();
+        const todayDay = todayObj.getDate();
+        const [selYear, selMonth] = selectedMonth.split('-');
+        
+        if (parseInt(selYear, 10) === todayObj.getFullYear() && parseInt(selMonth, 10) === todayObj.getMonth() + 1) {
+          setCurrentMonthData(prev => ({
+            ...prev,
+            [selectedSelfEmployee]: {
+              ...(prev[selectedSelfEmployee] || {}),
+              [todayDay]: 'P'
+            }
+          }));
+        }
+
+        toast.success(`Checked In Successfully as ${type}!`);
+        setSelfAttendance(insertedData);
+        setSelfiePreview(null);
+        setLiveAddress('');
+      } catch(e) {
+         console.error(e);
+         toast.error('Failed to Check-In');
+      } finally {
+         setActionLoading(false);
+      }
+    }, (err) => {
+       console.error(err);
+       toast.error('Location permission denied or unavailable');
+       setActionLoading(false);
+    });
+  };
+
+  const handleCheckOut = () => {
+    if(!selfAttendance || !selfAttendance.id) return;
+    if(!selfiePreview) return toast.error('Please capture an image to check out');
+    setActionLoading(true);
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        const { latitude, longitude } = position.coords;
+        const address = await getAddressFromCoords(latitude, longitude);
+        const checkOutTime = new Date();
+        const checkInTime = new Date(selfAttendance.check_in);
+        
+        const diff = checkOutTime.getTime() - checkInTime.getTime();
+        const h = Math.floor(diff / (1000 * 60 * 60)).toString().padStart(2, '0');
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)).toString().padStart(2, '0');
+        const s = Math.floor((diff % (1000 * 60)) / 1000).toString().padStart(2, '0');
+        const workingHours = `${h}:${m}:${s}`;
+
+        const { data: updatedData, error } = await supabase
+          .from('attendance')
+          .update({
+            check_out: checkOutTime.toISOString(),
+            working_hours: workingHours,
+            remarks: `Check-out location: ${address}`
+          })
+          .eq('id', selfAttendance.id)
+          .select()
+          .single();
+          
+        if (error) throw error;
+
+        toast.success('Checked Out Successfully!');
+        setSelfAttendance(updatedData);
+        setSelfiePreview(null);
+        setLiveAddress('');
+      } catch(e) {
+         console.error(e);
+         toast.error('Failed to Check-Out');
+      } finally {
+         setActionLoading(false);
+      }
+    }, (err) => {
+       console.error(err);
+       toast.error('Location permission is required for Check-Out');
+       setActionLoading(false);
+    });
+  };
+
+  const fetchMonitoringLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('attendance_date', monitoringDate)
+        .order('check_in', { ascending: false });
+        
+      if (error) throw error;
+
+      // Attach employee name manually
+      const populatedLogs = (data || []).map(log => {
+        const emp = employees.find(e => e.id === log.employee_id);
+        return { ...log, employee: { name: emp ? emp.name : 'Unknown' } };
+      });
+
+      setMonitoringLogs(populatedLogs);
+    } catch(e) {
+      console.error(e);
+      toast.error('Failed to load monitoring logs');
+    }
+  };
+
+  useEffect(() => {
+    if(activeTab === 'Monitoring') {
+      fetchMonitoringLogs();
+    }
+  }, [activeTab, monitoringDate]);
 
   // Current month data
   const [currentMonthData, setCurrentMonthData] = useState({});
@@ -395,6 +700,28 @@ export default function Attendance() {
         >
           Dashboard
         </button>
+        <button
+          onClick={() => setActiveTab('Self Attendance')}
+          style={{
+            padding: '12px 24px', background: 'none', border: 'none',
+            borderBottom: activeTab === 'Self Attendance' ? '2px solid var(--primary-color)' : '2px solid transparent',
+            color: activeTab === 'Self Attendance' ? 'var(--primary-color)' : 'var(--text-secondary)',
+            fontWeight: 600, cursor: 'pointer', fontSize: '1rem', transition: 'all 0.2s ease'
+          }}
+        >
+          Self Attendance
+        </button>
+        <button
+          onClick={() => setActiveTab('Monitoring')}
+          style={{
+            padding: '12px 24px', background: 'none', border: 'none',
+            borderBottom: activeTab === 'Monitoring' ? '2px solid var(--primary-color)' : '2px solid transparent',
+            color: activeTab === 'Monitoring' ? 'var(--primary-color)' : 'var(--text-secondary)',
+            fontWeight: 600, cursor: 'pointer', fontSize: '1rem', transition: 'all 0.2s ease'
+          }}
+        >
+          Live Monitoring
+        </button>
       </div>
 
       {activeTab === 'Register' && (
@@ -594,6 +921,224 @@ export default function Attendance() {
         </div>
       )}
 
+      {activeTab === 'Self Attendance' && (
+        <div className="fade-in">
+          <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+            <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: '1.4rem', color: 'var(--text-primary)' }}>Self Attendance</h2>
+                <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ fontSize: '0.95rem', fontWeight: 600, display: 'block', marginBottom: '8px' }}>Employee Identity</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ padding: '10px', backgroundColor: 'var(--bg-main)', borderRadius: '8px', color: 'var(--primary-color)' }}>
+                    <User size={20} />
+                  </div>
+                  <select 
+                    value={selectedSelfEmployee} 
+                    onChange={e => {
+                      setSelectedSelfEmployee(e.target.value);
+                      setSelfiePreview(null);
+                      setLiveAddress('');
+                    }}
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)', fontSize: '0.95rem' }}
+                  >
+                    <option value="">Select your name...</option>
+                    {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {selectedSelfEmployee && (
+                <>
+                  {selfAttendance?.check_out ? (
+                    <div style={{ padding: '20px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#166534', textAlign: 'center', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle2 size={40} />
+                      <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Attendance Completed</h3>
+                      <p style={{ margin: 0, fontSize: '0.9rem' }}>You have already checked in and checked out for today.</p>
+                      <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.95rem' }}>Working Hours: {selfAttendance.working_hours}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: 'var(--bg-main)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                        <div>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status</span>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, color: selfAttendance?.check_in ? '#10b981' : '#f59e0b' }}>
+                            {selfAttendance?.check_in ? 'Checked In' : 'Not Checked In'}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Working Hours</span>
+                          <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary-color)', fontFamily: 'monospace' }}>
+                            {liveWorkingHours}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.95rem', fontWeight: 600, display: 'block', marginBottom: '8px' }}>Capture Photo</label>
+                        
+                        {!selfiePreview ? (
+                          isCameraOpen ? (
+                            <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
+                              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', display: 'block', maxHeight: '250px', objectFit: 'cover' }} />
+                              <canvas ref={canvasRef} style={{ display: 'none' }} />
+                              <div style={{ position: 'absolute', bottom: '12px', left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                                <button onClick={captureImage} className="btn-primary" style={{ borderRadius: '24px', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>
+                                  <Camera size={16} /> Capture
+                                </button>
+                                <button onClick={stopCamera} style={{ borderRadius: '24px', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', cursor: 'pointer', backdropFilter: 'blur(4px)', fontSize: '0.9rem' }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div onClick={startCamera} style={{ position: 'relative', border: '2px dashed var(--border-color)', borderRadius: '12px', padding: '24px', textAlign: 'center', backgroundColor: 'var(--bg-main)', transition: 'all 0.2s', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.style.borderColor = 'var(--primary-color)'} onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ padding: '12px', backgroundColor: 'var(--bg-card)', borderRadius: '50%', color: 'var(--primary-color)' }}>
+                                  <Camera size={24} />
+                                </div>
+                                <span style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>Tap to Open Camera</span>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                            <img src={selfiePreview} alt="Selfie Preview" style={{ width: '100%', display: 'block', maxHeight: '250px', objectFit: 'cover' }} />
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '12px', backdropFilter: 'blur(4px)' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Clock size={12} /> {new Date().toLocaleString()}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 500, display: 'flex', gap: '6px', lineHeight: '1.4' }}>
+                                  <MapPin size={14} style={{ flexShrink: 0, marginTop: '2px' }} /> 
+                                  {locating ? 'Fetching...' : (liveAddress || 'Unavailable')}
+                                </div>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => { setSelfiePreview(null); setLiveAddress(''); }}
+                              style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: '4px' }}>
+                        {!selfAttendance?.check_in ? (
+                          <button onClick={handleCheckIn} disabled={actionLoading || locating} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#10b981' }}>
+                            {actionLoading ? <Loader className="spin" size={18} /> : <Navigation size={18} />}
+                            {actionLoading ? 'Processing...' : 'Submit Check-In'}
+                          </button>
+                        ) : (
+                          <button onClick={handleCheckOut} disabled={actionLoading || locating} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#ef4444' }}>
+                            {actionLoading ? <Loader className="spin" size={18} /> : <LogOut size={18} />}
+                            {actionLoading ? 'Processing...' : 'Submit Check-Out'}
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'Monitoring' && (
+        <div className="fade-in">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Navigation size={20} color="var(--primary-color)" /> Live Attendance Monitoring
+            </h2>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <input 
+                type="date" 
+                value={monitoringDate} 
+                onChange={e => setMonitoringDate(e.target.value)} 
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)', fontWeight: 600 }}
+              />
+              <button onClick={fetchMonitoringLogs} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}>
+                <RefreshCw size={16} /> Refresh
+              </button>
+            </div>
+          </div>
+          
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', margin: '0' }}>
+                <thead style={{ backgroundColor: 'var(--bg-main)', position: 'sticky', top: 0, zIndex: 10 }}>
+                  <tr>
+                    <th style={{...thStyle, textAlign: 'left'}}>Employee</th>
+                    <th style={thStyle}>Photo</th>
+                    <th style={thStyle}>Date</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Check In</th>
+                    <th style={thStyle}>Check Out</th>
+                    <th style={thStyle}>Work Hours</th>
+                    <th style={{...thStyle, textAlign: 'left'}}>Location</th>
+                    <th style={thStyle}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monitoringLogs.length > 0 ? (
+                    monitoringLogs.map((log, idx) => {
+                      const formattedDate = log.attendance_date ? log.attendance_date.split('-').reverse().join('-') : '-';
+                      return (
+                      <tr key={log.id} style={{ backgroundColor: idx % 2 === 0 ? 'var(--bg-card)' : 'rgba(0,0,0,0.02)' }}>
+                        <td style={{...tdStyle, textAlign: 'left', fontWeight: 600}}>{log.employee?.name || `Emp ID: ${log.employee_id}`}</td>
+                        <td style={tdStyle}>
+                          {log.image ? (
+                            <img 
+                              src={log.image} 
+                              alt="Selfie" 
+                              onClick={() => setViewingImage(log.image)}
+                              style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-color)', cursor: 'pointer', transition: 'transform 0.2s' }} 
+                              onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                              onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                            />
+                          ) : (
+                            <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', margin: '0 auto' }}>
+                              <User size={20} />
+                            </div>
+                          )}
+                        </td>
+                        <td style={{...tdStyle, fontWeight: 600, color: 'var(--text-secondary)'}}>{formattedDate}</td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '12px', backgroundColor: log.attendance_type === 'Office' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)', color: log.attendance_type === 'Office' ? '#166534' : '#1d4ed8', fontWeight: 600 }}>
+                            {log.attendance_type}
+                          </span>
+                        </td>
+                        <td style={{...tdStyle, fontWeight: 500}}>{log.check_in ? new Date(log.check_in).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                        <td style={{...tdStyle, fontWeight: 500}}>{log.check_out ? new Date(log.check_out).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                        <td style={{...tdStyle, fontFamily: 'monospace', fontWeight: 700}}>{log.working_hours || '-'}</td>
+                        <td style={{...tdStyle, textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-secondary)'}}>
+                          {log.address && log.address.length > 50 ? `${log.address.substring(0, 50)}...` : log.address}
+                        </td>
+                        <td style={tdStyle}>
+                          {log.latitude && (
+                            <a href={`https://www.google.com/maps/search/?api=1&query=${log.latitude},${log.longitude}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--primary-color)', textDecoration: 'none', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--primary-color)' }}>
+                              <MapPin size={12} /> Map
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    )})
+                  ) : (
+                    <tr><td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No live attendance records for {monitoringDate.split('-').reverse().join('-')}.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Upload Modal */}
       {showModal && (
         <div style={{
@@ -671,6 +1216,27 @@ export default function Attendance() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Full Size Image Modal */}
+      {viewingImage && (
+        <div 
+          onClick={() => setViewingImage(null)}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', backdropFilter: 'blur(4px)' }}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', animation: 'fadeIn 0.2s ease-out' }}
+          >
+            <button 
+              onClick={() => setViewingImage(null)}
+              style={{ position: 'absolute', top: '-48px', right: 0, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem', padding: '8px 16px', borderRadius: '32px' }}
+            >
+              <X size={20} /> Close
+            </button>
+            <img src={viewingImage} alt="Full Size" style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', objectFit: 'contain', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }} />
           </div>
         </div>
       )}

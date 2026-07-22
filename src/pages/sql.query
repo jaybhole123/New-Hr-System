@@ -429,3 +429,24 @@ CREATE TABLE public.inventory_items (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT inventory_items_pkey PRIMARY KEY (id)
 );
+
+CREATE TABLE public.attendance (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  employee_id integer NOT NULL,
+  attendance_date date NOT NULL,
+  check_in timestamp with time zone,
+  check_out timestamp with time zone,
+  working_hours text,
+  attendance_type text,
+  employee_name text,
+  latitude numeric,
+  longitude numeric,
+  address text,
+  image text,
+  device_info text,
+  remarks text,
+  status text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT attendance_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_attendance_employee FOREIGN KEY (employee_id) REFERENCES public.employee (id) ON DELETE CASCADE
+);

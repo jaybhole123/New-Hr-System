@@ -344,23 +344,21 @@ export default function LeaveTracker() {
               LEAVE BALANCE
             </div>
           
-          <div style={{ overflowX: 'auto', paddingBottom: '12px' }}>
+          <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 300px)', paddingBottom: '12px' }}>
             <table style={{ minWidth: '1000px', borderCollapse: 'collapse', margin: '0' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 4px -2px rgba(0,0,0,0.1)' }}>
                 <tr>
-                  <th colSpan="2" style={{ ...thStyle, borderBottom: 'none' }}></th>
-                  <th colSpan="3" style={{ ...thStyle, backgroundColor: 'rgba(59, 130, 246, 0.05)', color: 'var(--primary-color)', padding: '10px', borderBottom: '2px solid var(--primary-color)' }}>Casual Leave (CL)</th>
-                  <th colSpan="3" style={{ ...thStyle, backgroundColor: 'rgba(239, 68, 68, 0.05)', color: 'var(--danger)', padding: '10px', borderBottom: '2px solid var(--danger)' }}>Sick Leave (SL)</th>
-                  <th colSpan="3" style={{ ...thStyle, backgroundColor: 'rgba(16, 185, 129, 0.05)', color: 'var(--success)', padding: '10px', borderBottom: '2px solid var(--success)' }}>Earned Leave (EL)</th>
-                  <th style={{ ...thStyle, borderBottom: 'none' }}></th>
+                  <th rowSpan="2" style={{...thStyle, width: '60px', position: 'sticky', top: 0, zIndex: 11, backgroundColor: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)'}}>Sr. No.</th>
+                  <th rowSpan="2" style={{...thStyle, textAlign: 'left', minWidth: '200px', position: 'sticky', top: 0, zIndex: 11, backgroundColor: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)'}}>Employee Name</th>
+                  <th colSpan="3" style={{ ...thStyle, backgroundColor: '#eff6ff', color: 'var(--primary-color)', padding: '10px', borderBottom: '2px solid var(--primary-color)', position: 'sticky', top: 0, zIndex: 11 }}>Casual Leave (CL)</th>
+                  <th colSpan="3" style={{ ...thStyle, backgroundColor: '#fef2f2', color: 'var(--danger)', padding: '10px', borderBottom: '2px solid var(--danger)', position: 'sticky', top: 0, zIndex: 11 }}>Sick Leave (SL)</th>
+                  <th colSpan="3" style={{ ...thStyle, backgroundColor: '#ecfdf5', color: 'var(--success)', padding: '10px', borderBottom: '2px solid var(--success)', position: 'sticky', top: 0, zIndex: 11 }}>Earned Leave (EL)</th>
+                  <th rowSpan="2" style={{...thStyle, backgroundColor: '#f8fafc', position: 'sticky', top: 0, zIndex: 11, borderBottom: '1px solid var(--border-color)'}}>Total<br/>Balance</th>
                 </tr>
                 <tr>
-                  <th style={{...thStyle, width: '60px'}}>Sr. No.</th>
-                  <th style={{...thStyle, textAlign: 'left', minWidth: '200px'}}>Employee Name</th>
-                  <th style={thStyle}>Allotted</th><th style={thStyle}>Taken</th><th style={thStyle}>Balance</th>
-                  <th style={thStyle}>Allotted</th><th style={thStyle}>Taken</th><th style={thStyle}>Balance</th>
-                  <th style={thStyle}>Allotted</th><th style={thStyle}>Taken</th><th style={thStyle}>Balance</th>
-                  <th style={{...thStyle, backgroundColor: 'rgba(0,0,0,0.02)'}}>Total<br/>Balance</th>
+                  <th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Allotted</th><th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Taken</th><th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Balance</th>
+                  <th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Allotted</th><th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Taken</th><th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Balance</th>
+                  <th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Allotted</th><th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Taken</th><th style={{...thStyle, position: 'sticky', top: '43px', zIndex: 10, backgroundColor: 'var(--bg-main)'}}>Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -438,19 +436,19 @@ export default function LeaveTracker() {
               LEAVE REQUESTS
             </div>
             
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', margin: '0' }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 4px -2px rgba(0,0,0,0.1)' }}>
                   <tr>
-                    <th style={{...thStyle, width: '60px'}}>Sr. No.</th>
-                    <th style={{...thStyle, textAlign: 'left'}}>Employee Name</th>
-                    <th style={thStyle}>Leave<br/>Type</th>
-                    <th style={thStyle}>From Date</th>
-                    <th style={thStyle}>To Date</th>
-                    <th style={thStyle}>No. of<br/>Days</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={{...thStyle, textAlign: 'left'}}>Reason / Remarks</th>
-                    <th style={thStyle}>Action</th>
+                    <th style={{...thStyle, width: '60px', position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>Sr. No.</th>
+                    <th style={{...thStyle, textAlign: 'left', position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>Employee Name</th>
+                    <th style={{...thStyle, position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>Leave<br/>Type</th>
+                    <th style={{...thStyle, position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>From Date</th>
+                    <th style={{...thStyle, position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>To Date</th>
+                    <th style={{...thStyle, position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>No. of<br/>Days</th>
+                    <th style={{...thStyle, position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>Status</th>
+                    <th style={{...thStyle, textAlign: 'left', position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>Reason / Remarks</th>
+                    <th style={{...thStyle, position: 'sticky', top: 0, backgroundColor: 'var(--bg-main)'}}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
