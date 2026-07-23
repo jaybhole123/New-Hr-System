@@ -985,7 +985,6 @@ export default function Attendance() {
                 </div>
               </div>
 
-              {selectedSelfEmployee && (
                 <>
                   {selfAttendance?.check_out ? (
                     <div style={{ padding: '20px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#166534', textAlign: 'center', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
@@ -1125,7 +1124,6 @@ export default function Attendance() {
                     </>
                   )}
                 </>
-              )}
             </div>
           </div>
         </div>
