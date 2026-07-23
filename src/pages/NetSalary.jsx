@@ -36,7 +36,8 @@ export default function NetSalary() {
               otherDeductions: s.other_deductions || 0,
               paymentStatus: s.payment_status || 'Pending',
               bankAccount: s.bank_account || '',
-              pfApplicable: s.pf_applicable !== false
+              pfApplicable: s.pf_applicable !== false,
+              esicApplicable: s.esic_applicable !== false
             };
           });
         }
@@ -60,14 +61,15 @@ export default function NetSalary() {
   }, []);
 
   const records = employees.map(emp => {
-    const sal = salaries[emp.id] || { basic: 0, hra: 0, allowances: 0, profTax: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true };
+    const sal = salaries[emp.id] || { basic: 0, hra: 0, allowances: 0, profTax: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true, esicApplicable: true };
     const gross = sal.basic + sal.hra + sal.allowances;
     
     // Deductions
     const pfDeduction = sal.pfApplicable ? (sal.basic * (settings.pf / 100)) : 0;
+    const esicDeduction = sal.esicApplicable ? (gross * (settings.esic / 100)) : 0;
     const ptax = sal.profTax || 0;
     const otherDeduct = sal.otherDeductions || 0;
-    const totalDeductions = pfDeduction + ptax + otherDeduct;
+    const totalDeductions = pfDeduction + esicDeduction + ptax + otherDeduct;
     
     const net = gross - totalDeductions;
 
@@ -82,6 +84,7 @@ export default function NetSalary() {
       breakdown: {
         sal,
         pfDeduction,
+        esicDeduction,
         ptax,
         empOtherDeductions: otherDeduct
       }
@@ -92,6 +95,7 @@ export default function NetSalary() {
   const totalGross = records.reduce((acc, curr) => acc + curr.gross, 0);
   const totalNet = records.reduce((acc, curr) => acc + curr.net, 0);
   const totalPF = records.reduce((acc, curr) => acc + curr.breakdown.pfDeduction, 0);
+  const totalESIC = records.reduce((acc, curr) => acc + curr.breakdown.esicDeduction, 0);
   const totalPTax = records.reduce((acc, curr) => acc + curr.breakdown.ptax, 0);
   const totalOtherDeduct = records.reduce((acc, curr) => acc + curr.breakdown.empOtherDeductions, 0);
   const totalDeductions = records.reduce((acc, curr) => acc + curr.deductions, 0);
@@ -224,6 +228,7 @@ export default function NetSalary() {
                   <th style={thStyle}>Allowances (₹)</th>
                   <th style={{...thStyle, backgroundColor: '#f8fafc'}}>Gross Salary (₹)</th>
                   <th style={thStyle}>PF (₹)</th>
+                  <th style={thStyle}>ESIC (₹)</th>
                   <th style={thStyle}>Prof. Tax (₹)</th>
                   <th style={thStyle}>Other Deduct. (₹)</th>
                   <th style={{...thStyle, backgroundColor: '#f8fafc'}}>Total Deduct. (₹)</th>
@@ -249,6 +254,7 @@ export default function NetSalary() {
                         <td style={tdNumStyle}>{allowances.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                         <td style={{...tdNumStyle, fontWeight: 600, color: 'var(--text-primary)', backgroundColor: 'rgba(0,0,0,0.02)'}}>{rec.gross.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                         <td style={{...tdNumStyle, color: 'var(--danger)'}}>{rec.breakdown.pfDeduction.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
+                        <td style={{...tdNumStyle, color: 'var(--danger)'}}>{rec.breakdown.esicDeduction.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                         <td style={{...tdNumStyle, color: 'var(--danger)'}}>{rec.breakdown.ptax.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                         <td style={{...tdNumStyle, color: 'var(--danger)'}}>{otherDeduct.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                         <td style={{...tdNumStyle, color: 'var(--danger)', fontWeight: 600, backgroundColor: 'rgba(239, 68, 68, 0.05)'}}>{rec.deductions.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
@@ -261,7 +267,7 @@ export default function NetSalary() {
                     );
                   })
                 ) : (
-                  <tr><td colSpan="14" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No employees found to display salary data.</td></tr>
+                  <tr><td colSpan="15" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No employees found to display salary data.</td></tr>
                 )}
                 {records.length > 0 && (
                   <tr style={{ backgroundColor: 'var(--bg-main)' }}>
@@ -271,6 +277,7 @@ export default function NetSalary() {
                     <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600}}>₹ {totalAllowances.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                     <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--text-primary)', backgroundColor: 'rgba(0,0,0,0.02)'}}>₹ {totalGross.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                     <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--danger)'}}>₹ {totalPF.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
+                    <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--danger)'}}>₹ {totalESIC.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                     <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--danger)'}}>₹ {totalPTax.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                     <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--danger)'}}>₹ {totalOtherDeduct.toLocaleString(undefined, {maximumFractionDigits:2})}</td>
                     <td style={{...tdNumStyle, border: '1px solid var(--border-color)', fontWeight: 600, color: 'var(--danger)', backgroundColor: 'rgba(239, 68, 68, 0.05)'}}>₹ {totalDeductions.toLocaleString(undefined, {maximumFractionDigits:2})}</td>

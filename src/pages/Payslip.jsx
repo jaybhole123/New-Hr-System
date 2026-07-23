@@ -37,7 +37,8 @@ export default function Payslip() {
               otherDeductions: s.other_deductions || 0,
               paymentStatus: s.payment_status || 'Pending',
               bankAccount: s.bank_account || '',
-              pfApplicable: s.pf_applicable !== false
+              pfApplicable: s.pf_applicable !== false,
+              esicApplicable: s.esic_applicable !== false
             };
           });
         }
@@ -61,14 +62,15 @@ export default function Payslip() {
   }, []);
 
   const records = employees.map(emp => {
-    const sal = salaries[emp.id] || { basic: 0, hra: 0, allowances: 0, profTax: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true };
+    const sal = salaries[emp.id] || { basic: 0, hra: 0, allowances: 0, profTax: 0, otherDeductions: 0, paymentStatus: 'Pending', bankAccount: '', pfApplicable: true, esicApplicable: true };
     const gross = sal.basic + sal.hra + sal.allowances;
     
     // Deductions
     const pfDeduction = sal.pfApplicable ? (sal.basic * (settings.pf / 100)) : 0;
+    const esicDeduction = sal.esicApplicable ? (gross * (settings.esic / 100)) : 0;
     const ptax = sal.profTax || 0;
     const otherDeduct = sal.otherDeductions || 0;
-    const totalDeductions = pfDeduction + ptax + otherDeduct;
+    const totalDeductions = pfDeduction + esicDeduction + ptax + otherDeduct;
     
     const net = gross - totalDeductions;
 
@@ -82,6 +84,7 @@ export default function Payslip() {
       breakdown: {
         sal,
         pfDeduction,
+        esicDeduction,
         ptax,
         empOtherDeductions: otherDeduct
       }
@@ -93,6 +96,7 @@ export default function Payslip() {
     breakdown: {
       sal: { basic: 0, hra: 0, allowances: 0 },
       pfDeduction: 0,
+      esicDeduction: 0,
       ptax: 0,
       empOtherDeductions: 0
     },
@@ -204,6 +208,7 @@ export default function Payslip() {
           <div>
             <h3 style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px' }}>Deductions</h3>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>PF</span><span>₹ {payrollData.breakdown.pfDeduction.toLocaleString(undefined, {maximumFractionDigits:2})}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>ESIC</span><span>₹ {(payrollData.breakdown.esicDeduction || 0).toLocaleString(undefined, {maximumFractionDigits:2})}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Professional Tax</span><span>₹ {payrollData.breakdown.ptax}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Other Deductions</span><span>₹ {payrollData.breakdown.empOtherDeductions}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', fontWeight: 700 }}><span>Total Deductions</span><span>₹ {payrollData.deductions.toLocaleString(undefined, {maximumFractionDigits:2})}</span></div>

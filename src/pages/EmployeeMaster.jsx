@@ -41,6 +41,8 @@ export default function EmployeeMaster() {
     dateOfBirth: '',
     drivingLicence: '',
     experience: '',
+    pfApplicable: false,
+    esicApplicable: false,
     status: 'Active'
   };
   
@@ -141,6 +143,8 @@ export default function EmployeeMaster() {
         drivingLicence: fullEmp.driving_licence || '',
         experience: fullEmp.experience || '',
         photo: fullEmp.photo || '',
+        pfApplicable: fullEmp.pf_applicable || false,
+        esicApplicable: fullEmp.esic_applicable || false,
         status: fullEmp.status || 'Active'
       });
       setPhotoPreview(fullEmp.photo || null);
@@ -161,6 +165,8 @@ export default function EmployeeMaster() {
       } else {
         setPhotoPreview(null);
       }
+    } else if (e.target.type === 'checkbox') {
+      setFormData({...formData, [e.target.name]: e.target.checked});
     } else {
       setFormData({...formData, [e.target.name]: e.target.value});
     }
@@ -217,6 +223,8 @@ export default function EmployeeMaster() {
         driving_licence: formData.drivingLicence,
         experience: formData.experience,
         photo: uploadedPhotoUrl,
+        pf_applicable: formData.pfApplicable,
+        esic_applicable: formData.esicApplicable,
         status: formData.status
       };
 
@@ -429,6 +437,18 @@ export default function EmployeeMaster() {
                 <div className="form-group">
                   <label>Experience</label>
                   <input type="text" name="experience" value={formData.experience} onChange={handleAddChange} placeholder="e.g. 2 Years / Fresher" />
+                </div>
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" name="pfApplicable" checked={formData.pfApplicable} onChange={handleAddChange} style={{ width: '18px', height: '18px' }} />
+                    <span style={{ fontWeight: 500 }}>PF Applicable</span>
+                  </label>
+                </div>
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                    <input type="checkbox" name="esicApplicable" checked={formData.esicApplicable} onChange={handleAddChange} style={{ width: '18px', height: '18px' }} />
+                    <span style={{ fontWeight: 500 }}>ESIC Applicable</span>
+                  </label>
                 </div>
                 <div className="form-group">
                   <label>Date of Birth</label>

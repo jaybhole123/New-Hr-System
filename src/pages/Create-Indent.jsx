@@ -19,7 +19,7 @@ const Indent = () => {
     { product: '', qty: '', unit: '', expectedDate: '', remarks: '' }
   ]);
   
-  const [activeTab, setActiveTab] = useState('Department Head');
+  const [activeTab, setActiveTab] = useState('Create Indent');
   
   const [isEditing, setIsEditing] = useState(false);
   const [editIndentNumber, setEditIndentNumber] = useState(null);
@@ -194,7 +194,7 @@ const Indent = () => {
     setDepartmentName('');
     setIssuedBy('');
     setApprovedBy('');
-    setShowModal(false);
+    setActiveTab('Department Head');
   };
 
   const handleEdit = (item) => {
@@ -211,7 +211,7 @@ const Indent = () => {
     loadedItems.push({ product: '', qty: '', unit: '', expectedDate: '', remarks: '' });
     setItems(loadedItems);
     
-    setShowModal(true);
+    setActiveTab('Create Indent');
   };
 
   const handleDelete = async (indentNumber) => {
@@ -301,12 +301,24 @@ const Indent = () => {
           <h1 className="page-title">Product Indents</h1>
           <p className="page-subtitle">Manage material and supply indents.</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={16} /> Create Indent
-        </button>
       </div>
 
       <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>
+        <button
+          onClick={() => setActiveTab('Create Indent')}
+          style={{
+            padding: '12px 24px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'Create Indent' ? '2px solid var(--primary-color)' : '2px solid transparent',
+            color: activeTab === 'Create Indent' ? 'var(--primary-color)' : 'var(--text-secondary)',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontSize: '1rem'
+          }}
+        >
+          Create Indent
+        </button>
         <button
           onClick={() => setActiveTab('Department Head')}
           style={{
@@ -339,6 +351,87 @@ const Indent = () => {
         </button>
       </div>
 
+      {activeTab === 'Create Indent' && (
+        <div className="card">
+          <h2 style={{ margin: 0, fontSize: '1.5rem', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>{isEditing ? 'Edit Material Indent' : 'Create Material Indent'}</h2>
+          
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="form-group" style={{ maxWidth: '300px' }}>
+              <label>Department Name <span style={{ color: 'var(--danger)' }}>*</span></label>
+              <select 
+                required 
+                value={departmentName} 
+                onChange={(e) => setDepartmentName(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)' }}
+              >
+                <option value="">Select Department...</option>
+                <option value="Jai Bhole Enterprises">Jai Bhole Enterprises</option>
+                <option value="Jai Bhole Traders">Jai Bhole Traders</option>
+              </select>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '50px' }}>#</th>
+                    <th>Product / Material</th>
+                    <th style={{ width: '100px' }}>Qty</th>
+                    <th style={{ width: '100px' }}>Unit</th>
+                    <th style={{ width: '160px' }}>Expected Date</th>
+                    <th>Remarks</th>
+                    <th style={{ width: '60px' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={index}>
+                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{index + 1}</td>
+                      <td>
+                        <input type="text" value={item.product} onChange={e => handleItemChange(index, 'product', e.target.value)} placeholder="Enter material..." style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }} />
+                      </td>
+                      <td>
+                        <input type="number" value={item.qty} onChange={e => handleItemChange(index, 'qty', e.target.value)} min="1" placeholder="0" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }} />
+                      </td>
+                      <td>
+                        <input type="text" value={item.unit} onChange={e => handleItemChange(index, 'unit', e.target.value)} placeholder="e.g. Kg" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }} />
+                      </td>
+                      <td>
+                        <input type="date" value={item.expectedDate} onChange={e => handleItemChange(index, 'expectedDate', e.target.value)} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }} />
+                      </td>
+                      <td>
+                        <input type="text" value={item.remarks} onChange={e => handleItemChange(index, 'remarks', e.target.value)} placeholder="Remarks..." style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }} />
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button type="button" onClick={() => handleRemoveRow(index)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <button type="button" onClick={handleAddRow} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontWeight: 600 }}>
+                <Plus size={16} /> Add New Row
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" onClick={handleCancel} className="btn-primary" style={{ backgroundColor: 'var(--text-secondary)' }}>
+                Cancel
+              </button>
+              <button type="submit" className="btn-primary">
+                {isEditing ? 'Update Request' : 'Submit Request'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {activeTab !== 'Create Indent' && (
       <div className="card">
         <div style={{ overflowX: 'auto' }}>
           <table>
@@ -431,6 +524,7 @@ const Indent = () => {
           </table>
         </div>
       </div>
+      )}
 
       {/* View Indent Modal */}
       {selectedIndent && (
@@ -503,98 +597,6 @@ const Indent = () => {
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100,
-          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '24px'
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{isEditing ? 'Edit Material Indent' : 'Create Material Indent'}</h2>
-              <button onClick={handleCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <X size={24} />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} style={{ overflowY: 'auto', padding: '24px 0 0 0', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div className="form-group" style={{ maxWidth: '300px' }}>
-                <label>Department Name <span style={{ color: 'var(--danger)' }}>*</span></label>
-                <select 
-                  required 
-                  value={departmentName} 
-                  onChange={(e) => setDepartmentName(e.target.value)}
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)' }}
-                >
-                  <option value="">Select Department...</option>
-                  <option value="Jai Bhole Enterprises">Jai Bhole Enterprises</option>
-                  <option value="Jai Bhole Traders">Jai Bhole Traders</option>
-                </select>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '50px' }}>#</th>
-                      <th>Product / Material</th>
-                      <th style={{ width: '100px' }}>Qty</th>
-                      <th style={{ width: '100px' }}>Unit</th>
-                      <th style={{ width: '160px' }}>Expected Date</th>
-                      <th>Remarks</th>
-                      <th style={{ width: '60px' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, index) => (
-                      <tr key={index}>
-                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{index + 1}</td>
-                        <td>
-                          <input type="text" value={item.product} onChange={e => handleItemChange(index, 'product', e.target.value)} placeholder="Enter material..." style={{ border: 'none', background: 'transparent' }} />
-                        </td>
-                        <td>
-                          <input type="number" value={item.qty} onChange={e => handleItemChange(index, 'qty', e.target.value)} min="1" placeholder="0" style={{ border: 'none', background: 'transparent' }} />
-                        </td>
-                        <td>
-                          <input type="text" value={item.unit} onChange={e => handleItemChange(index, 'unit', e.target.value)} placeholder="e.g. Kg" style={{ border: 'none', background: 'transparent' }} />
-                        </td>
-                        <td>
-                          <input type="date" value={item.expectedDate} onChange={e => handleItemChange(index, 'expectedDate', e.target.value)} style={{ border: 'none', background: 'transparent' }} />
-                        </td>
-                        <td>
-                          <input type="text" value={item.remarks} onChange={e => handleItemChange(index, 'remarks', e.target.value)} placeholder="Remarks..." style={{ border: 'none', background: 'transparent' }} />
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button type="button" onClick={() => handleRemoveRow(index)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                <button type="button" onClick={handleAddRow} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontWeight: 600 }}>
-                  <Plus size={16} /> Add New Row
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                <button type="button" onClick={handleCancel} className="btn-primary" style={{ backgroundColor: 'var(--text-secondary)' }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  {isEditing ? 'Update Request' : 'Submit Request'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

@@ -37,7 +37,8 @@ export default function SalaryStructure() {
             otherDeductions: s.other_deductions || 0,
             paymentStatus: s.payment_status || 'Pending',
             bankAccount: s.bank_account || '',
-            pfApplicable: s.pf_applicable !== false
+            pfApplicable: s.pf_applicable !== false,
+            esicApplicable: s.esic_applicable !== false
           };
         });
       }
@@ -64,7 +65,8 @@ export default function SalaryStructure() {
     otherDeductions: 0,
     paymentStatus: 'Pending',
     bankAccount: '',
-    pfApplicable: true
+    pfApplicable: true,
+    esicApplicable: true
   });
 
   const handleSelectChange = (e) => {
@@ -81,7 +83,8 @@ export default function SalaryStructure() {
         otherDeductions: salaries[empId].otherDeductions || 0,
         paymentStatus: salaries[empId].paymentStatus || 'Pending',
         bankAccount: salaries[empId].bankAccount || selectedEmployeeDetails?.accountNo || '',
-        pfApplicable: salaries[empId].pfApplicable !== false
+        pfApplicable: salaries[empId].pfApplicable !== false,
+        esicApplicable: salaries[empId].esicApplicable !== false
       });
     } else {
       setFormData({ 
@@ -92,7 +95,8 @@ export default function SalaryStructure() {
         otherDeductions: 0, 
         paymentStatus: 'Pending', 
         bankAccount: selectedEmployeeDetails?.accountNo || '', 
-        pfApplicable: true 
+        pfApplicable: true,
+        esicApplicable: true 
       });
     }
   };
@@ -122,7 +126,8 @@ export default function SalaryStructure() {
         other_deductions: Number(formData.otherDeductions) || 0,
         payment_status: formData.paymentStatus,
         bank_account: formData.bankAccount,
-        pf_applicable: formData.pfApplicable
+        pf_applicable: formData.pfApplicable,
+        esic_applicable: formData.esicApplicable
       };
 
       const { error } = await supabase.from('salary_structures').upsert(upsertData, { onConflict: 'employee_id' });
@@ -144,7 +149,8 @@ export default function SalaryStructure() {
         otherDeductions: 0,
         paymentStatus: 'Pending',
         bankAccount: '',
-        pfApplicable: true
+        pfApplicable: true,
+        esicApplicable: true
       });
     } catch (err) {
       console.error('Error saving structure:', err);
@@ -162,7 +168,8 @@ export default function SalaryStructure() {
 
   const grossSalary = basicVal + hraVal + allowancesVal;
   const pfAmount = formData.pfApplicable ? (basicVal * (settings.pf / 100)) : 0;
-  const totalDeductions = pfAmount + profTaxVal + otherDeductVal;
+  const esicAmount = formData.esicApplicable ? (grossSalary * (settings.esic / 100)) : 0;
+  const totalDeductions = pfAmount + esicAmount + profTaxVal + otherDeductVal;
   const netSalary = selectedEmp ? Math.max(0, grossSalary - totalDeductions) : 0;
   
   const selectedEmpData = employees.find(e => e.id === selectedEmp) || {};
@@ -210,8 +217,18 @@ export default function SalaryStructure() {
             <label>PF Option</label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: selectedEmp ? 'pointer' : 'not-allowed', userSelect: 'none', backgroundColor: formData.pfApplicable ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)', padding: '10px 16px', borderRadius: '8px', width: '100%', transition: 'all 0.3s', margin: 0 }}>
               <input type="checkbox" name="pfApplicable" checked={formData.pfApplicable} onChange={handleChange} disabled={!selectedEmp} style={{ width: '18px', height: '18px', margin: 0 }} />
-              <span style={{ fontWeight: 600, color: formData.pfApplicable ? 'var(--primary-color)' : 'var(--danger)' }}>
+              <span style={{ fontWeight: 600, color: formData.pfApplicable ? 'var(--primary-color)' : 'var(--danger)', fontSize: '0.9rem' }}>
                 {formData.pfApplicable ? 'With PF (Deduct PF)' : 'Without PF (No PF)'}
+              </span>
+            </label>
+          </div>
+          
+          <div className="form-group">
+            <label>ESIC Option</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: selectedEmp ? 'pointer' : 'not-allowed', userSelect: 'none', backgroundColor: formData.esicApplicable ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', padding: '10px 16px', borderRadius: '8px', width: '100%', transition: 'all 0.3s', margin: 0 }}>
+              <input type="checkbox" name="esicApplicable" checked={formData.esicApplicable} onChange={handleChange} disabled={!selectedEmp} style={{ width: '18px', height: '18px', margin: 0 }} />
+              <span style={{ fontWeight: 600, color: formData.esicApplicable ? '#10b981' : 'var(--danger)', fontSize: '0.9rem' }}>
+                {formData.esicApplicable ? 'With ESIC (Deduct ESIC)' : 'Without ESIC'}
               </span>
             </label>
           </div>
@@ -226,6 +243,10 @@ export default function SalaryStructure() {
           <div className="form-group">
             <label>PF (₹)</label>
             <input type="number" value={pfAmount.toFixed(2)} disabled style={{ opacity: 0.7 }} />
+          </div>
+          <div className="form-group">
+            <label>ESIC (₹)</label>
+            <input type="number" value={esicAmount.toFixed(2)} disabled style={{ opacity: 0.7 }} />
           </div>
           <div className="form-group">
             <label>Prof. Tax (₹)</label>
