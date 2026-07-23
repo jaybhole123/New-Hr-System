@@ -992,18 +992,36 @@ export default function Attendance() {
                       <CheckCircle2 size={40} />
                       <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Attendance Completed</h3>
                       <p style={{ margin: 0, fontSize: '0.9rem' }}>You have already checked in and checked out for today.</p>
-                      <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.95rem' }}>Working Hours: {selfAttendance.working_hours}</p>
+                      
+                      <div style={{ display: 'flex', gap: '24px', margin: '8px 0', backgroundColor: 'rgba(255,255,255,0.6)', padding: '12px 24px', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.8 }}>Check-In Time</div>
+                          <div style={{ fontWeight: 600, marginTop: '4px' }}>{new Date(selfAttendance.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        </div>
+                        <div style={{ width: '1px', backgroundColor: 'rgba(0,0,0,0.1)' }}></div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.8 }}>Check-Out Time</div>
+                          <div style={{ fontWeight: 600, marginTop: '4px' }}>{new Date(selfAttendance.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        </div>
+                      </div>
+
+                      <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.95rem' }}>Total Working Hours: {selfAttendance.working_hours}</p>
                     </div>
                   ) : (
                     <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: 'var(--bg-main)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                        <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: 'var(--bg-main)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Status</span>
                           <div style={{ fontSize: '1rem', fontWeight: 600, color: selfAttendance?.check_in ? '#10b981' : '#f59e0b' }}>
                             {selfAttendance?.check_in ? 'Checked In' : 'Not Checked In'}
                           </div>
+                          {selfAttendance?.check_in && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 500 }}>
+                              Time: {new Date(selfAttendance.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </div>
+                          )}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Working Hours</span>
                           <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary-color)', fontFamily: 'monospace' }}>
                             {liveWorkingHours}
@@ -1011,21 +1029,53 @@ export default function Attendance() {
                         </div>
                       </div>
 
+                      <div style={{ marginBottom: '16px', display: 'flex', gap: '12px' }}>
+                        <button onClick={handleCheckIn} disabled={!!selfAttendance?.check_in || actionLoading || locating || (location && location.accuracy > 150)} className="btn-primary" style={{ flex: 1, padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#10b981', opacity: (!!selfAttendance?.check_in || actionLoading || locating || (location && location.accuracy > 150)) ? 0.6 : 1 }}>
+                          {(actionLoading && !selfAttendance?.check_in) ? <Loader className="spin" size={18} /> : <Navigation size={18} />}
+                          Check-In
+                        </button>
+                        <button onClick={handleCheckOut} disabled={!selfAttendance?.check_in || actionLoading || locating || (location && location.accuracy > 150)} className="btn-primary" style={{ flex: 1, padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#ef4444', opacity: (!selfAttendance?.check_in || actionLoading || locating || (location && location.accuracy > 150)) ? 0.6 : 1 }}>
+                          {(actionLoading && selfAttendance?.check_in) ? <Loader className="spin" size={18} /> : <LogOut size={18} />}
+                          Check-Out
+                        </button>
+                      </div>
+
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '0.95rem', fontWeight: 600, display: 'block', marginBottom: '8px' }}>Capture Photo</label>
                         
                         {!selfiePreview ? (
                           isCameraOpen ? (
-                            <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
-                              <video ref={videoRef} autoPlay playsInline style={{ width: '100%', display: 'block', maxHeight: '250px', objectFit: 'cover' }} />
-                              <canvas ref={canvasRef} style={{ display: 'none' }} />
-                              <div style={{ position: 'absolute', bottom: '12px', left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                                <button onClick={captureImage} className="btn-primary" style={{ borderRadius: '24px', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                  <Camera size={16} /> Capture
-                                </button>
-                                <button onClick={stopCamera} style={{ borderRadius: '24px', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', cursor: 'pointer', backdropFilter: 'blur(4px)', fontSize: '0.9rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#64748b', borderRadius: '16px', overflow: 'hidden', border: '1px solid #475569' }}>
+                              <div style={{ position: 'relative', width: '100%', backgroundColor: '#000' }}>
+                                <video ref={videoRef} autoPlay playsInline style={{ width: '100%', display: 'block', maxHeight: '250px', objectFit: 'cover' }} />
+                                <canvas ref={canvasRef} style={{ display: 'none' }} />
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '8px 16px' }}>
+                                <button onClick={stopCamera} style={{ backgroundColor: 'transparent', border: 'none', color: '#ffffff', fontSize: '1rem', cursor: 'pointer', padding: '8px', fontWeight: 500 }}>
                                   Cancel
                                 </button>
+                                
+                                {/* Shutter Button */}
+                                <button 
+                                  onClick={captureImage} 
+                                  style={{ 
+                                    width: '48px', 
+                                    height: '48px', 
+                                    borderRadius: '50%', 
+                                    backgroundColor: '#fff', 
+                                    border: '3px solid #94a3b8', 
+                                    outline: '2px solid #fff',
+                                    outlineOffset: '2px',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                                    transition: 'transform 0.1s'
+                                  }}
+                                  onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+                                  onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                />
+                                
+                                <div style={{ width: '56px' }}></div> {/* Spacer to keep shutter perfectly centered */}
                               </div>
                             </div>
                           ) : (
@@ -1070,20 +1120,6 @@ export default function Attendance() {
                               <X size={14} />
                             </button>
                           </div>
-                        )}
-                      </div>
-
-                      <div style={{ marginTop: '4px' }}>
-                        {!selfAttendance?.check_in ? (
-                          <button onClick={handleCheckIn} disabled={actionLoading || locating || (location && location.accuracy > 150)} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#10b981', opacity: (actionLoading || locating || (location && location.accuracy > 150)) ? 0.6 : 1 }}>
-                            {actionLoading ? <Loader className="spin" size={18} /> : <Navigation size={18} />}
-                            {actionLoading ? 'Processing...' : 'Submit Check-In'}
-                          </button>
-                        ) : (
-                          <button onClick={handleCheckOut} disabled={actionLoading || locating || (location && location.accuracy > 150)} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#ef4444', opacity: (actionLoading || locating || (location && location.accuracy > 150)) ? 0.6 : 1 }}>
-                            {actionLoading ? <Loader className="spin" size={18} /> : <LogOut size={18} />}
-                            {actionLoading ? 'Processing...' : 'Submit Check-Out'}
-                          </button>
                         )}
                       </div>
                     </>
