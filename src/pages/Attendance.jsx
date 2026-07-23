@@ -1051,8 +1051,9 @@ export default function Attendance() {
                                   {locating ? 'Fetching...' : (location?.address || 'Unavailable')}
                                 </div>
                                 {location && (
-                                  <div style={{ fontSize: '0.75rem', fontWeight: 500, color: location.accuracy > 150 ? '#ef4444' : '#10b981', marginTop: '4px' }}>
-                                    Accuracy: {location.accuracy} meters
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 500, color: location.accuracy > 150 ? '#ef4444' : '#10b981', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span>Accuracy: {location.accuracy} meters</span>
+                                    <span>Coordinates: {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</span>
                                   </div>
                                 )}
                                 {locationError && (

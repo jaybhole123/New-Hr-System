@@ -11,21 +11,34 @@ export const useCurrentLocation = () => {
 
   const getReverseGeocoding = async (lat, lon) => {
     try {
-      // Use Nominatim OpenStreetMap for reverse geocoding
+      // Use LocationIQ for detailed street-level geocoding
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`
+        `https://us1.locationiq.com/v1/reverse?key=pk.a51ce64854c596ad67f87f875cb09070&lat=${lat}&lon=${lon}&format=json`
       );
       if (!response.ok) throw new Error('Geocoding network error');
       
       const data = await response.json();
-      const addressObj = data.address || {};
+      const addr = data.address || {};
+      
+      // Construct a clean address avoiding weird POIs (Points of Interest)
+      const addressParts = [];
+      if (addr.house_number) addressParts.push(addr.house_number);
+      if (addr.road) addressParts.push(addr.road);
+      if (addr.neighbourhood) addressParts.push(addr.neighbourhood);
+      if (addr.suburb) addressParts.push(addr.suburb);
+      if (addr.city || addr.town || addr.village) addressParts.push(addr.city || addr.town || addr.village);
+      if (addr.state) addressParts.push(addr.state);
+      if (addr.postcode) addressParts.push(addr.postcode);
+      if (addr.country) addressParts.push(addr.country);
+      
+      const addressStr = addressParts.length > 0 ? addressParts.join(', ') : (data.display_name || 'Address not found');
       
       return {
-        address: data.display_name || 'Address not found',
-        city: addressObj.city || addressObj.town || addressObj.village || '',
-        state: addressObj.state || '',
-        country: addressObj.country || '',
-        pincode: addressObj.postcode || ''
+        address: addressStr,
+        city: addr.city || addr.town || addr.village || '',
+        state: addr.state || '',
+        country: addr.country || '',
+        pincode: addr.postcode || ''
       };
     } catch (err) {
       console.error('Reverse Geocoding Failed:', err);
