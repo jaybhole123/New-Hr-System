@@ -3,6 +3,25 @@ import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { Plus, X, Pencil, Trash2, Loader } from 'lucide-react';
 
+const DocumentPreview = ({ file, url, onPreview }) => {
+  if (!file && !url) return null;
+  const isImageFile = file && file.type.startsWith('image/');
+  // Assume it's an image unless it explicitly contains .pdf
+  const isImageUrl = url && !url.toLowerCase().includes('.pdf');
+  
+  if (isImageFile) {
+    const previewUrl = URL.createObjectURL(file);
+    return <div style={{ marginTop: '8px', cursor: 'pointer' }} onClick={() => onPreview(previewUrl)}><img src={previewUrl} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-color)' }} /></div>;
+  } else if (file) {
+     return <div style={{ marginTop: '4px' }}><small style={{ color: 'var(--success)' }}>{file.name}</small></div>;
+  } else if (isImageUrl) {
+    return <div style={{ marginTop: '8px', cursor: 'pointer' }} onClick={() => onPreview(url)}><img src={url} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-color)' }} /></div>;
+  } else if (url) {
+    return <div style={{ marginTop: '4px' }}><a href={url} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--primary-color)' }}>View Existing Document</a></div>;
+  }
+  return null;
+};
+
 export default function EmployeeMaster() {
   // Main state
   const [employees, setEmployees] = useState([]);
@@ -38,6 +57,10 @@ export default function EmployeeMaster() {
     bloodGroup: '',
     healthIssues: '',
     photo: '',
+    aadharDocUrl: '',
+    panDocUrl: '',
+    dlDocUrl: '',
+    accountDocUrl: '',
     dateOfBirth: '',
     drivingLicence: '',
     experience: '',
@@ -49,6 +72,13 @@ export default function EmployeeMaster() {
   const [formData, setFormData] = useState(initialFormData);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [aadharFile, setAadharFile] = useState(null);
+  const [panFile, setPanFile] = useState(null);
+  const [dlFile, setDlFile] = useState(null);
+  const [accountFile, setAccountFile] = useState(null);
+  
+  // Image Preview Modal State
+  const [previewModalImg, setPreviewModalImg] = useState(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -143,11 +173,19 @@ export default function EmployeeMaster() {
         drivingLicence: fullEmp.driving_licence || '',
         experience: fullEmp.experience || '',
         photo: fullEmp.photo || '',
+        aadharDocUrl: fullEmp.aadhar_doc_url || '',
+        panDocUrl: fullEmp.pan_doc_url || '',
+        dlDocUrl: fullEmp.dl_doc_url || '',
+        accountDocUrl: fullEmp.account_doc_url || '',
         pfApplicable: fullEmp.pf_applicable || false,
         esicApplicable: fullEmp.esic_applicable || false,
         status: fullEmp.status || 'Active'
       });
       setPhotoPreview(fullEmp.photo || null);
+      setAadharFile(null);
+      setPanFile(null);
+      setDlFile(null);
+      setAccountFile(null);
       setIsAddModalOpen(true);
     } catch (err) {
       console.error('Error fetching full details:', err);
@@ -157,14 +195,14 @@ export default function EmployeeMaster() {
 
   // --- Handlers for Adding/Editing Employee ---
   const handleAddChange = (e) => {
-    if (e.target.name === 'photoFile') {
+    if (['photoFile', 'aadharFile', 'panFile', 'dlFile', 'accountFile'].includes(e.target.name)) {
       const file = e.target.files[0];
-      setPhotoFile(file);
-      if (file) {
-        setPhotoPreview(URL.createObjectURL(file));
-      } else {
-        setPhotoPreview(null);
-      }
+      const preview = file ? URL.createObjectURL(file) : null;
+      if (e.target.name === 'photoFile') { setPhotoFile(file); setPhotoPreview(preview); }
+      if (e.target.name === 'aadharFile') setAadharFile(file);
+      if (e.target.name === 'panFile') setPanFile(file);
+      if (e.target.name === 'dlFile') setDlFile(file);
+      if (e.target.name === 'accountFile') setAccountFile(file);
     } else if (e.target.type === 'checkbox') {
       setFormData({...formData, [e.target.name]: e.target.checked});
     } else {
@@ -177,27 +215,31 @@ export default function EmployeeMaster() {
     setIsSubmitting(true);
 
     try {
-      let uploadedPhotoUrl = formData.photo; // fallback if any string was there
-
-      if (photoFile) {
-        const fileExt = photoFile.name.split('.').pop();
+      const uploadFile = async (file) => {
+        if (!file) return null;
+        const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `photos/${fileName}`;
+        const filePath = `documents/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('profiles').upload(filePath, file);
+        if (uploadError) throw new Error('Document upload failed. ' + uploadError.message);
+        const { data } = supabase.storage.from('profiles').getPublicUrl(filePath);
+        return data.publicUrl;
+      };
 
-        const { error: uploadError } = await supabase.storage
-          .from('profiles')
-          .upload(filePath, photoFile);
-
-        if (uploadError) {
-          throw new Error('Photo upload failed. Have you created the "profiles" public bucket in Supabase? ' + uploadError.message);
-        }
-
-        const { data: publicUrlData } = supabase.storage
-          .from('profiles')
-          .getPublicUrl(filePath);
-
-        uploadedPhotoUrl = publicUrlData.publicUrl;
-      }
+      let uploadedPhotoUrl = formData.photo;
+      if (photoFile) uploadedPhotoUrl = await uploadFile(photoFile);
+      
+      let aadharDocUrl = formData.aadharDocUrl;
+      if (aadharFile) aadharDocUrl = await uploadFile(aadharFile);
+      
+      let panDocUrl = formData.panDocUrl;
+      if (panFile) panDocUrl = await uploadFile(panFile);
+      
+      let dlDocUrl = formData.dlDocUrl;
+      if (dlFile) dlDocUrl = await uploadFile(dlFile);
+      
+      let accountDocUrl = formData.accountDocUrl;
+      if (accountFile) accountDocUrl = await uploadFile(accountFile);
 
       const employeeData = {
         user_name: formData.name,
@@ -223,6 +265,10 @@ export default function EmployeeMaster() {
         driving_licence: formData.drivingLicence,
         experience: formData.experience,
         photo: uploadedPhotoUrl,
+        aadhar_doc_url: aadharDocUrl,
+        pan_doc_url: panDocUrl,
+        dl_doc_url: dlDocUrl,
+        account_doc_url: accountDocUrl,
         pf_applicable: formData.pfApplicable,
         esic_applicable: formData.esicApplicable,
         status: formData.status
@@ -285,6 +331,10 @@ export default function EmployeeMaster() {
             setFormData(initialFormData);
             setPhotoFile(null);
             setPhotoPreview(null);
+            setAadharFile(null);
+            setPanFile(null);
+            setDlFile(null);
+            setAccountFile(null);
             setIsAddModalOpen(true);
           }}
           style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
@@ -526,15 +576,42 @@ export default function EmployeeMaster() {
               <div className="form-grid">
                 <div className="form-group">
                   <label>Aadhar Document (No.)</label>
-                  <input type="text" name="aadharNo" value={formData.aadharNo} onChange={handleAddChange} required placeholder="1234 5678 9012" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input type="text" name="aadharNo" value={formData.aadharNo} onChange={handleAddChange} required placeholder="1234 5678 9012" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ cursor: 'pointer', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Upload Aadhar
+                        <input type="file" name="aadharFile" accept="image/*,.pdf" onChange={handleAddChange} style={{ display: 'none' }} />
+                      </label>
+                    </div>
+                    <DocumentPreview file={aadharFile} url={formData.aadharDocUrl} onPreview={setPreviewModalImg} />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>PAN Card No.</label>
-                  <input type="text" name="panNo" value={formData.panNo} onChange={handleAddChange} required placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input type="text" name="panNo" value={formData.panNo} onChange={handleAddChange} required placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ cursor: 'pointer', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Upload PAN
+                        <input type="file" name="panFile" accept="image/*,.pdf" onChange={handleAddChange} style={{ display: 'none' }} />
+                      </label>
+                    </div>
+                    <DocumentPreview file={panFile} url={formData.panDocUrl} onPreview={setPreviewModalImg} />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Driving Licence (No.)</label>
-                  <input type="text" name="drivingLicence" value={formData.drivingLicence} onChange={handleAddChange} placeholder="e.g. MH1420110062821" style={{ textTransform: 'uppercase' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input type="text" name="drivingLicence" value={formData.drivingLicence} onChange={handleAddChange} placeholder="e.g. MH1420110062821" style={{ textTransform: 'uppercase' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ cursor: 'pointer', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Upload DL
+                        <input type="file" name="dlFile" accept="image/*,.pdf" onChange={handleAddChange} style={{ display: 'none' }} />
+                      </label>
+                    </div>
+                    <DocumentPreview file={dlFile} url={formData.dlDocUrl} onPreview={setPreviewModalImg} />
+                  </div>
                 </div>
               </div>
 
@@ -546,7 +623,16 @@ export default function EmployeeMaster() {
                 </div>
                 <div className="form-group">
                   <label>Account Number</label>
-                  <input type="text" name="accountNo" value={formData.accountNo} onChange={handleAddChange} required placeholder="123456789012" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input type="text" name="accountNo" value={formData.accountNo} onChange={handleAddChange} required placeholder="123456789012" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ cursor: 'pointer', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border-color)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        Upload Passbook/Cheque
+                        <input type="file" name="accountFile" accept="image/*,.pdf" onChange={handleAddChange} style={{ display: 'none' }} />
+                      </label>
+                    </div>
+                    <DocumentPreview file={accountFile} url={formData.accountDocUrl} onPreview={setPreviewModalImg} />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>IFSC Code</label>
@@ -567,6 +653,28 @@ export default function EmployeeMaster() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Image Preview Modal */}
+      {previewModalImg && (
+        <div 
+          onClick={() => setPreviewModalImg(null)}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '40px' }}
+        >
+          <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setPreviewModalImg(null); }}
+              style={{ position: 'absolute', top: '-40px', right: 0, background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}
+            >
+              <X size={32} />
+            </button>
+            <img 
+              src={previewModalImg} 
+              alt="Document Preview" 
+              style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }} 
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
         </div>
       )}

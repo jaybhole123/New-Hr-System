@@ -459,3 +459,10 @@ ADD COLUMN esic_applicable boolean DEFAULT false;
 -- Query to add esic_applicable to salary_structures table (if not exists)
 ALTER TABLE public.salary_structures
 ADD COLUMN esic_applicable boolean DEFAULT false;
+
+-- Query to add document upload URLs to users table
+ALTER TABLE public.users 
+ADD COLUMN aadhar_doc_url text,
+ADD COLUMN pan_doc_url text,
+ADD COLUMN dl_doc_url text,
+ADD COLUMN account_doc_url text;
