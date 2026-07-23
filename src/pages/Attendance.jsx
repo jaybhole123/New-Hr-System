@@ -994,6 +994,9 @@ export default function Attendance() {
                       
                       <div style={{ display: 'flex', gap: '24px', margin: '8px 0', backgroundColor: 'rgba(255,255,255,0.6)', padding: '12px 24px', borderRadius: '8px' }}>
                         <div>
+
+
+                          
                           <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.8 }}>Check-In Time</div>
                           <div style={{ fontWeight: 600, marginTop: '4px' }}>{new Date(selfAttendance.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
