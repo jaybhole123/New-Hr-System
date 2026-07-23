@@ -1,6 +1,7 @@
   import React, { useState, useEffect } from 'react';
 import { Plus, X, Save, Loader, Download, FileSpreadsheet, MapPin, Navigation, Clock, CheckCircle2, User, RefreshCw, LogOut, LogIn, Camera } from 'lucide-react';
 import { useEmployees } from '../hooks/useEmployees';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -42,8 +43,8 @@ export default function Attendance() {
   const [monitoringDate, setMonitoringDate] = useState(new Date().toISOString().split('T')[0]);
   const [actionLoading, setActionLoading] = useState(false);
   const [selfiePreview, setSelfiePreview] = useState(null);
-  const [liveAddress, setLiveAddress] = useState('');
-  const [locating, setLocating] = useState(false);
+  
+  const { location, loading: locating, error: locationError, refreshLocation } = useCurrentLocation();
   
   const videoRef = React.useRef(null);
   const canvasRef = React.useRef(null);
@@ -130,17 +131,7 @@ export default function Attendance() {
   }, [selfAttendance]);
 
   const fetchCurrentLocation = () => {
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      const { latitude, longitude } = position.coords;
-      const addr = await getAddressFromCoords(latitude, longitude);
-      setLiveAddress(addr);
-      setLocating(false);
-    }, (err) => {
-      console.error(err);
-      toast.error('Location permission required');
-      setLocating(false);
-    });
+    refreshLocation();
   };
 
   const startCamera = async () => {
@@ -179,8 +170,8 @@ export default function Attendance() {
       setSelfiePreview(dataUrl);
       stopCamera();
       
-      if (!liveAddress) {
-        fetchCurrentLocation();
+      if (!location) {
+        refreshLocation();
       }
     }
   };
@@ -193,19 +184,29 @@ export default function Attendance() {
     };
   }, [cameraStream]);
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     if(!selectedSelfEmployee) return toast.error('Please select an employee first');
     if(!selfiePreview) return toast.error('Please capture an image to check in');
-    if(!navigator.geolocation) return toast.error('Geolocation is not supported by your browser');
     
+    if (!location) {
+        toast.error("Validating location, please wait...");
+        refreshLocation();
+        return;
+    }
+    if (locationError) {
+        toast.error(locationError);
+        return;
+    }
+    if (location.accuracy > 150) {
+        toast.error("Your GPS accuracy is low. Please move to an open area and try again.");
+        return;
+    }
+
     setActionLoading(true);
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      try {
-        const { latitude, longitude } = position.coords;
+    try {
+        const { latitude, longitude, accuracy, address, city, state, country, pincode, timestamp } = location;
         const dist = getDistanceFromLatLonInM(latitude, longitude, OFFICE_LAT, OFFICE_LON);
         const type = dist <= OFFICE_RADIUS_METERS ? 'Office' : 'Field';
-        const address = await getAddressFromCoords(latitude, longitude);
-        
         const today = new Date().toISOString().split('T')[0];
         
         const emp = employees.find(e => e.id === parseInt(selectedSelfEmployee, 10));
@@ -220,7 +221,8 @@ export default function Attendance() {
           address,
           image: selfiePreview,
           status: 'Present',
-          device_info: navigator.userAgent
+          device_info: navigator.userAgent,
+          remarks: JSON.stringify({ accuracy, city, state, country, pincode, timestamp })
         };
         
         const { data: insertedData, error } = await supabase
@@ -249,28 +251,35 @@ export default function Attendance() {
         toast.success(`Checked In Successfully as ${type}!`);
         setSelfAttendance(insertedData);
         setSelfiePreview(null);
-        setLiveAddress('');
-      } catch(e) {
+    } catch(e) {
          console.error(e);
          toast.error('Failed to Check-In');
-      } finally {
+    } finally {
          setActionLoading(false);
-      }
-    }, (err) => {
-       console.error(err);
-       toast.error('Location permission denied or unavailable');
-       setActionLoading(false);
-    });
+    }
   };
 
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     if(!selfAttendance || !selfAttendance.id) return;
     if(!selfiePreview) return toast.error('Please capture an image to check out');
+    
+    if (!location) {
+        toast.error("Validating location, please wait...");
+        refreshLocation();
+        return;
+    }
+    if (locationError) {
+        toast.error(locationError);
+        return;
+    }
+    if (location.accuracy > 150) {
+        toast.error("Your GPS accuracy is low. Please move to an open area and try again.");
+        return;
+    }
+
     setActionLoading(true);
-    navigator.geolocation.getCurrentPosition(async (position) => {
-      try {
-        const { latitude, longitude } = position.coords;
-        const address = await getAddressFromCoords(latitude, longitude);
+    try {
+        const { latitude, longitude, accuracy, address, city, state, country, pincode, timestamp } = location;
         const checkOutTime = new Date();
         const checkInTime = new Date(selfAttendance.check_in);
         
@@ -285,7 +294,9 @@ export default function Attendance() {
           .update({
             check_out: checkOutTime.toISOString(),
             working_hours: workingHours,
-            remarks: `Check-out location: ${address}`
+            remarks: `Check-out location: ${address}. Details: ${JSON.stringify({ accuracy, city, state, country, pincode, timestamp })}`,
+            latitude,
+            longitude
           })
           .eq('id', selfAttendance.id)
           .select()
@@ -296,18 +307,12 @@ export default function Attendance() {
         toast.success('Checked Out Successfully!');
         setSelfAttendance(updatedData);
         setSelfiePreview(null);
-        setLiveAddress('');
-      } catch(e) {
+    } catch(e) {
          console.error(e);
          toast.error('Failed to Check-Out');
-      } finally {
+    } finally {
          setActionLoading(false);
-      }
-    }, (err) => {
-       console.error(err);
-       toast.error('Location permission is required for Check-Out');
-       setActionLoading(false);
-    });
+    }
   };
 
   const fetchMonitoringLogs = async () => {
@@ -971,7 +976,6 @@ export default function Attendance() {
                     onChange={e => {
                       setSelectedSelfEmployee(e.target.value);
                       setSelfiePreview(null);
-                      setLiveAddress('');
                     }}
                     style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-main)', fontSize: '0.95rem' }}
                   >
@@ -1044,12 +1048,22 @@ export default function Attendance() {
                                 </div>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 500, display: 'flex', gap: '6px', lineHeight: '1.4' }}>
                                   <MapPin size={14} style={{ flexShrink: 0, marginTop: '2px' }} /> 
-                                  {locating ? 'Fetching...' : (liveAddress || 'Unavailable')}
+                                  {locating ? 'Fetching...' : (location?.address || 'Unavailable')}
                                 </div>
+                                {location && (
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 500, color: location.accuracy > 150 ? '#ef4444' : '#10b981', marginTop: '4px' }}>
+                                    Accuracy: {location.accuracy} meters
+                                  </div>
+                                )}
+                                {locationError && (
+                                  <div style={{ fontSize: '0.75rem', fontWeight: 500, color: '#ef4444', marginTop: '4px' }}>
+                                    {locationError}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <button 
-                              onClick={() => { setSelfiePreview(null); setLiveAddress(''); }}
+                              onClick={() => { setSelfiePreview(null); }}
                               style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
                             >
                               <X size={14} />
@@ -1060,12 +1074,12 @@ export default function Attendance() {
 
                       <div style={{ marginTop: '4px' }}>
                         {!selfAttendance?.check_in ? (
-                          <button onClick={handleCheckIn} disabled={actionLoading || locating} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#10b981' }}>
+                          <button onClick={handleCheckIn} disabled={actionLoading || locating || (location && location.accuracy > 150)} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#10b981', opacity: (actionLoading || locating || (location && location.accuracy > 150)) ? 0.6 : 1 }}>
                             {actionLoading ? <Loader className="spin" size={18} /> : <Navigation size={18} />}
                             {actionLoading ? 'Processing...' : 'Submit Check-In'}
                           </button>
                         ) : (
-                          <button onClick={handleCheckOut} disabled={actionLoading || locating} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#ef4444' }}>
+                          <button onClick={handleCheckOut} disabled={actionLoading || locating || (location && location.accuracy > 150)} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#ef4444', opacity: (actionLoading || locating || (location && location.accuracy > 150)) ? 0.6 : 1 }}>
                             {actionLoading ? <Loader className="spin" size={18} /> : <LogOut size={18} />}
                             {actionLoading ? 'Processing...' : 'Submit Check-Out'}
                           </button>
